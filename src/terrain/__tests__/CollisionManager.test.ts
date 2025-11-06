@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { CollisionManager, SensorDirection } from '../CollisionManager';
 import { TerrainTiles, TileSolidity } from '../TerrainTile';
 import { GroundMode } from '../../types/SonicTypes';

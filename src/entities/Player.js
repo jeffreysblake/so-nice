@@ -15,7 +15,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     rollKey;
     // Sensor dimensions
     sensorWidth = 9;
-    heightRadius = 20;
     constructor(scene, x, y) {
         super(scene, x, y, 'sonic-placeholder');
         // Add to scene

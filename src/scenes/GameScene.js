@@ -1,12 +1,14 @@
 import Phaser from 'phaser';
 import { Player } from '../entities/Player';
 import { TerrainManager } from '../terrain/TerrainManager';
+import { Spring, SpringType, SpringOrientation } from '../objects/Spring';
 /**
  * GameScene - Main gameplay scene
  */
 export class GameScene extends Phaser.Scene {
     player;
     terrainManager;
+    springs = [];
     cursors;
     debugText;
     debugKey;
@@ -18,10 +20,17 @@ export class GameScene extends Phaser.Scene {
         this.physics.world.setBounds(0, 0, 3840, 672); // 4x screen width for scrolling
         // Create terrain system
         this.terrainManager = new TerrainManager(this);
-        this.terrainManager.buildTestLevel();
+        this.terrainManager.buildGreenHillZone();
         // Create player
         this.player = new Player(this, 100, 600);
         this.player.setCollisionManager(this.terrainManager.getCollisionManager());
+        // Create springs at strategic locations
+        // Spring at bottom of downhill run (launches player)
+        this.springs.push(new Spring(this, 110 * 16, 46 * 16, SpringType.YELLOW, SpringOrientation.UP));
+        // Spring in valley (Section 5)
+        this.springs.push(new Spring(this, 123 * 16, 47 * 16, SpringType.RED, SpringOrientation.UP));
+        // Spring before platform section to help with gap
+        this.springs.push(new Spring(this, 168 * 16, 41 * 16, SpringType.YELLOW, SpringOrientation.UP));
         // Set up camera
         this.cameras.main.setBounds(0, 0, 3840, 672);
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
@@ -44,6 +53,13 @@ export class GameScene extends Phaser.Scene {
             return;
         // Update player with input
         this.player.update(time, delta, this.cursors);
+        // Update springs and check for collisions
+        this.springs.forEach(spring => {
+            if (spring.checkPlayerCollision(this.player.x, this.player.y, 20)) {
+                spring.onPlayerInteract(this.player);
+            }
+            spring.update(time, delta);
+        });
         // Update terrain (for debug rendering)
         this.terrainManager.update();
         // Toggle debug mode

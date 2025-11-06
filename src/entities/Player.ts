@@ -24,7 +24,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   // Sensor dimensions
   private readonly sensorWidth = 9;
-  private readonly heightRadius = 20;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'sonic-placeholder');

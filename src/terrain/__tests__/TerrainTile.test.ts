@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TerrainTile, TerrainTiles, TileSolidity } from '../TerrainTile';
+import { TerrainTiles, TileSolidity } from '../TerrainTile';
 
 /**
  * Test suite for TerrainTile
