@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { Player } from '../entities/Player';
 import { TerrainManager } from '../terrain/TerrainManager';
 import { Spring, SpringType, SpringOrientation } from '../objects/Spring';
+import { Ring } from '../objects/Ring';
 /**
  * GameScene - Main gameplay scene
  */
@@ -9,8 +10,11 @@ export class GameScene extends Phaser.Scene {
     player;
     terrainManager;
     springs = [];
+    rings = [];
+    ringCount = 0;
     cursors;
     debugText;
+    hudText;
     debugKey;
     constructor() {
         super({ key: 'GameScene' });
@@ -31,14 +35,27 @@ export class GameScene extends Phaser.Scene {
         this.springs.push(new Spring(this, 123 * 16, 47 * 16, SpringType.RED, SpringOrientation.UP));
         // Spring before platform section to help with gap
         this.springs.push(new Spring(this, 168 * 16, 41 * 16, SpringType.YELLOW, SpringOrientation.UP));
+        // Create rings throughout the level
+        this.createRings();
         // Set up camera
         this.cameras.main.setBounds(0, 0, 3840, 672);
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         // Set up input
         this.cursors = this.input.keyboard.createCursorKeys();
         this.debugKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+        // HUD text (always visible)
+        this.hudText = this.add.text(10, 10, '', {
+            fontSize: '18px',
+            color: '#ffff00',
+            fontFamily: 'Arial',
+            stroke: '#000000',
+            strokeThickness: 4,
+        });
+        this.hudText.setScrollFactor(0);
+        this.hudText.setDepth(1001);
+        this.updateHUD();
         // Debug text
-        this.debugText = this.add.text(10, 10, '', {
+        this.debugText = this.add.text(10, 80, '', {
             fontSize: '14px',
             color: '#00ff00',
             backgroundColor: '#000000',
@@ -59,6 +76,17 @@ export class GameScene extends Phaser.Scene {
                 spring.onPlayerInteract(this.player);
             }
             spring.update(time, delta);
+        });
+        // Update rings and check for collection
+        this.rings.forEach(ring => {
+            if (ring.checkPlayerCollision(this.player.x, this.player.y, 20)) {
+                ring.onPlayerInteract(this.player);
+                if (ring.isCollected()) {
+                    this.ringCount++;
+                    this.updateHUD();
+                }
+            }
+            ring.update(time, delta);
         });
         // Update terrain (for debug rendering)
         this.terrainManager.update();
@@ -88,5 +116,54 @@ export class GameScene extends Phaser.Scene {
             'Down: Roll (when moving)',
             'D: Toggle Debug',
         ].join('\n'));
+    }
+    updateHUD() {
+        this.hudText.setText(`RINGS: ${this.ringCount}`);
+    }
+    createRings() {
+        // Starting area - line of rings
+        for (let i = 0; i < 10; i++) {
+            this.rings.push(new Ring(this, (5 + i * 2) * 16, 35 * 16));
+        }
+        // Before first hill
+        for (let i = 0; i < 5; i++) {
+            this.rings.push(new Ring(this, (25 + i * 2) * 16, 38 * 16));
+        }
+        // Arc over first loop entrance
+        for (let i = 0; i < 7; i++) {
+            const x = (36 + i) * 16;
+            const y = (32 - Math.abs(i - 3) * 2) * 16;
+            this.rings.push(new Ring(this, x, y));
+        }
+        // High path rings
+        for (let i = 0; i < 8; i++) {
+            this.rings.push(new Ring(this, (62 + i * 3) * 16, 32 * 16));
+        }
+        // Low path rings
+        for (let i = 0; i < 8; i++) {
+            this.rings.push(new Ring(this, (64 + i * 3) * 16, 40 * 16));
+        }
+        // Downhill run
+        for (let i = 0; i < 12; i++) {
+            this.rings.push(new Ring(this, (95 + i * 2) * 16, (39 - i) * 16));
+        }
+        // Valley rings (around red spring)
+        for (let i = 0; i < 6; i++) {
+            this.rings.push(new Ring(this, (120 + i * 2) * 16, 46 * 16));
+        }
+        // Before second loop
+        for (let i = 0; i < 5; i++) {
+            this.rings.push(new Ring(this, (138 + i * 2) * 16, 38 * 16));
+        }
+        // Platform section - challenging placement
+        this.rings.push(new Ring(this, 160 * 16, 35 * 16));
+        this.rings.push(new Ring(this, 164 * 16, 33 * 16));
+        this.rings.push(new Ring(this, 170 * 16, 35 * 16));
+        this.rings.push(new Ring(this, 175 * 16, 37 * 16));
+        // Goal area celebration
+        for (let i = 0; i < 10; i++) {
+            this.rings.push(new Ring(this, (200 + i * 2) * 16, 39 * 16));
+        }
+        console.log(`Created ${this.rings.length} rings in the level`);
     }
 }
