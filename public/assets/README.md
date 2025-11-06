@@ -59,17 +59,26 @@ assets/
 
 ## 🚀 Quick Setup
 
-### Option 1: Manual Download
+### Option 1: Interactive Setup (Recommended)
+```bash
+npm run setup-sprites
+```
+This interactive script will:
+- Guide you through downloading each sprite
+- Open browser links for you to click download
+- Verify files are saved correctly
+- Show installation status
+
+### Option 2: Manual Download
 1. Visit each link above
 2. Click the download button on The Spriters Resource
 3. Save PNG file to the specified location in this directory
 
-### Option 2: Script (if provided)
+### Option 3: Automated Download (May Not Work)
 ```bash
-# Run from project root
-npm run download-assets
+npm run download-sprites
 ```
-(Note: Asset download script not yet implemented)
+Note: Automated download may fail due to website protections. Use Option 1 if this doesn't work.
 
 ## ⚠️ Important Notes
 

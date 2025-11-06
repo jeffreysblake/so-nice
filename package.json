@@ -15,7 +15,9 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
-    "test:all": "npm run test && npm run test:e2e"
+    "test:all": "npm run test && npm run test:e2e",
+    "setup-sprites": "node scripts/setup-sprites.js",
+    "download-sprites": "node scripts/download-sprites.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
