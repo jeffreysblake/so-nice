@@ -5,12 +5,14 @@ import { Spring, SpringType, SpringOrientation } from '../objects/Spring';
 import { Ring } from '../objects/Ring';
 import { Motobug } from '../objects/Motobug';
 import { Crabmeat } from '../objects/Crabmeat';
+import { LifeSystem } from '../systems/LifeSystem';
 /**
  * GameScene - Main gameplay scene
  */
 export class GameScene extends Phaser.Scene {
     player;
     terrainManager;
+    lifeSystem;
     springs = [];
     rings = [];
     enemies = [];
@@ -30,6 +32,10 @@ export class GameScene extends Phaser.Scene {
         // Create player
         this.player = new Player(this, 100, 600);
         this.player.setCollisionManager(this.terrainManager.getCollisionManager());
+        // Create life system and set callbacks
+        this.lifeSystem = new LifeSystem(this, 100, 600);
+        this.lifeSystem.setCallbacks(() => this.onPlayerDeath(), () => this.onPlayerRespawn(), () => this.onGameOver());
+        this.player.setLifeSystem(this.lifeSystem);
         // Create springs at strategic locations
         // Spring at bottom of downhill run (launches player)
         this.springs.push(new Spring(this, 110 * 16, 46 * 16, SpringType.YELLOW, SpringOrientation.UP));
@@ -141,7 +147,45 @@ export class GameScene extends Phaser.Scene {
         ].join('\n'));
     }
     updateHUD() {
-        this.hudText.setText(`RINGS: ${this.player.getRingCount()}`);
+        const lives = this.lifeSystem ? this.lifeSystem.getLives() : 3;
+        this.hudText.setText(`RINGS: ${this.player.getRingCount()}  LIVES: ${lives}`);
+    }
+    /**
+     * Handle player death
+     */
+    onPlayerDeath() {
+        console.log('GameScene: Player died');
+        // Disable player input
+        // Play death music (if available)
+    }
+    /**
+     * Handle player respawn
+     */
+    onPlayerRespawn() {
+        console.log('GameScene: Player respawning');
+        this.player.respawn();
+        this.updateHUD();
+    }
+    /**
+     * Handle game over
+     */
+    onGameOver() {
+        console.log('GameScene: Game Over!');
+        // Show game over text
+        const gameOverText = this.add.text(this.cameras.main.width / 2, this.cameras.main.height / 2, 'GAME OVER', {
+            fontSize: '64px',
+            color: '#ff0000',
+            fontFamily: 'Arial',
+            stroke: '#000000',
+            strokeThickness: 8,
+        });
+        gameOverText.setOrigin(0.5);
+        gameOverText.setScrollFactor(0);
+        gameOverText.setDepth(2000);
+        // Wait 3 seconds then restart
+        this.time.delayedCall(3000, () => {
+            this.scene.restart();
+        });
     }
     createRings() {
         // Starting area - line of rings

@@ -9,6 +9,7 @@ import { CollisionManager } from '../terrain/CollisionManager';
 import { GravityUtils } from '../utils/GravityUtils';
 import { getSonicAnimationForState } from '../config/SonicAnimations';
 import { DamageSystem } from '../systems/DamageSystem';
+import { LifeSystem } from '../systems/LifeSystem';
 
 /**
  * Player - Sonic character with authentic physics
@@ -23,6 +24,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // Damage system
   private damageSystem: DamageSystem;
   private ringCount: number = 0;
+
+  // Life system
+  private lifeSystem!: LifeSystem;
 
   // Input tracking
   private jumpKey!: Phaser.Input.Keyboard.Key;
@@ -97,6 +101,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.collisionManager = manager;
   }
 
+  /**
+   * Set the life system (called by GameScene)
+   */
+  setLifeSystem(lifeSystem: LifeSystem): void {
+    this.lifeSystem = lifeSystem;
+  }
+
   private setupInput(scene: Phaser.Scene) {
     if (scene.input.keyboard) {
       this.jumpKey = scene.input.keyboard.addKey(
@@ -152,6 +163,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Update position in physics state
     this.physicsState.x = this.x;
     this.physicsState.y = this.y;
+
+    // Check for death conditions
+    this.checkDeathConditions();
 
     // Update sprite facing direction
     if (this.physicsState.groundSpeed > 0) {
@@ -518,6 +532,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    * Returns true if damage was applied
    */
   public takeDamage(knockbackDirection: number = 1): boolean {
+    // Check if player will die from this damage (0 rings)
+    if (this.ringCount === 0) {
+      // Player dies
+      this.die();
+      return true;
+    }
+
     const result = this.damageSystem.applyDamage(
       this.x,
       this.y,
@@ -568,5 +589,96 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    */
   public getDamageSystem(): DamageSystem {
     return this.damageSystem;
+  }
+
+  /**
+   * Check for death conditions (pit fall, etc.)
+   */
+  private checkDeathConditions(): void {
+    if (!this.lifeSystem || this.lifeSystem.isPlayerDead()) return;
+
+    // Death by falling into pit (below world bounds + buffer)
+    if (this.y > 700) {
+      console.log('Player fell into pit!');
+      this.die();
+    }
+
+    // TODO: Add time limit death condition
+  }
+
+  /**
+   * Trigger player death
+   */
+  public die(): void {
+    if (!this.lifeSystem || this.lifeSystem.isPlayerDead()) return;
+
+    // Play death animation
+    this.playDeathAnimation();
+
+    // Trigger death through life system
+    this.lifeSystem.triggerDeath();
+  }
+
+  /**
+   * Play death animation
+   */
+  private playDeathAnimation(): void {
+    // Freeze player state
+    this.physicsState.groundSpeed = 0;
+    this.physicsState.xVelocity = 0;
+    this.physicsState.yVelocity = -8; // Jump up slightly
+    this.physicsState.isGrounded = false;
+
+    // Animate death (fall off screen)
+    this.scene.tweens.add({
+      targets: this,
+      y: this.y + 200,
+      alpha: 0,
+      duration: 1500,
+      ease: 'Quad.easeIn',
+    });
+
+    console.log('Death animation playing...');
+  }
+
+  /**
+   * Respawn player at checkpoint
+   */
+  public respawn(): void {
+    if (!this.lifeSystem) return;
+
+    const respawnPos = this.lifeSystem.getRespawnPosition();
+
+    // Reset position
+    this.x = respawnPos.x;
+    this.y = respawnPos.y;
+    this.setAlpha(1.0);
+
+    // Reset physics state
+    this.physicsState.x = respawnPos.x;
+    this.physicsState.y = respawnPos.y;
+    this.physicsState.groundSpeed = 0;
+    this.physicsState.xVelocity = 0;
+    this.physicsState.yVelocity = 0;
+    this.physicsState.groundAngle = 0;
+    this.physicsState.isGrounded = false;
+    this.physicsState.isJumping = false;
+    this.physicsState.isRolling = false;
+    this.physicsState.controlLock = 30; // Brief control lock
+
+    // Reset damage system
+    this.damageSystem.reset();
+
+    // Start with some rings
+    this.ringCount = 0;
+
+    console.log('Player respawned!');
+  }
+
+  /**
+   * Get life system
+   */
+  public getLifeSystem(): LifeSystem | null {
+    return this.lifeSystem || null;
   }
 }
