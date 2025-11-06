@@ -9,8 +9,13 @@ This project aims to recreate the authentic Sonic physics and gameplay mechanics
 - ✅ Momentum-based physics system
 - ✅ Ground acceleration, deceleration, and friction
 - ✅ Variable jump height
-- 🚧 360-degree movement on slopes
-- 🚧 Loop-de-loops
+- ✅ Sensor-based collision detection
+- ✅ 360-degree movement on slopes
+- ✅ Slope physics (speed affected by angle)
+- ✅ Character rotation on slopes
+- ✅ Perpendicular jumping from surfaces
+- ✅ Heightmap-based terrain tiles
+- 🚧 Full loop-de-loops with gravity switching
 - 🚧 Rolling and spin dash
 - 🚧 Ring collection system
 - 🚧 Enemies and item boxes
@@ -61,6 +66,10 @@ src/
 ├── scenes/          # Phaser scenes
 │   ├── PreloadScene.ts
 │   └── GameScene.ts
+├── terrain/         # Terrain and collision system
+│   ├── TerrainTile.ts      # 16x16 heightmap tiles
+│   ├── CollisionManager.ts # Sensor-based collision
+│   └── TerrainManager.ts   # Level building and rendering
 ├── types/           # TypeScript type definitions
 │   └── SonicTypes.ts
 └── main.ts          # Entry point
@@ -69,8 +78,9 @@ src/
 ## Controls
 
 - **Arrow Keys**: Move left/right
-- **Z**: Jump
+- **Z**: Jump (perpendicular to surface)
 - **Down Arrow**: Roll (when moving)
+- **D**: Toggle debug visualization
 
 ## References
 
@@ -80,13 +90,16 @@ src/
 
 ## Roadmap
 
-### Phase 1: Core Physics ✅ (In Progress)
-- [x] Basic game loop
+### Phase 1: Core Physics ✅ (Complete)
+- [x] Basic game loop (60 FPS)
 - [x] Ground movement physics
-- [x] Jumping mechanics
-- [ ] Slope physics
-- [ ] 360-degree movement
-- [ ] Loop de loop mechanics
+- [x] Jumping mechanics with variable height
+- [x] Sensor-based collision detection
+- [x] Slope physics with angle detection
+- [x] 360-degree movement on slopes
+- [x] Character rotation based on surface
+- [x] Heightmap terrain system
+- [ ] Full loop de loop mechanics with gravity switching
 
 ### Phase 2: Player Character
 - [ ] Sprite animations
@@ -95,9 +108,10 @@ src/
 - [ ] Spin dash
 
 ### Phase 3: Level Design
-- [ ] Tilemap system
-- [ ] Collision layers
-- [ ] First level layout
+- [x] Heightmap tilemap system
+- [x] Sensor-based collision layers
+- [x] Test level with slopes and curves
+- [ ] Full Green Hill Zone level layout
 - [ ] Parallax backgrounds
 
 ### Phase 4: Game Objects
