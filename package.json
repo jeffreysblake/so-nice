@@ -1,0 +1,20 @@
+{
+  "name": "sonic-platformer",
+  "version": "0.1.0",
+  "description": "A 2D platformer clone of Sonic the Hedgehog using Phaser 3",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1"
+  }
+}
