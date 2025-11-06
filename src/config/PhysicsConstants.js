@@ -29,6 +29,17 @@ export class PhysicsConstants {
     static ANGLE_MODE_THRESHOLD = 45; // Degrees - when to switch gravity modes
     static MAX_SLOPE_ANGLE = 90; // Maximum angle Sonic can stand on
     static FALL_ANGLE = 70; // Angle at which Sonic falls off
+    // Gravity Modes (angles that trigger mode switches)
+    static MODE_FLOOR_MIN = 315; // Floor mode: 315° - 45°
+    static MODE_FLOOR_MAX = 45;
+    static MODE_RWALL_MIN = 45; // Right wall: 45° - 135°
+    static MODE_RWALL_MAX = 135;
+    static MODE_CEILING_MIN = 135; // Ceiling: 135° - 225°
+    static MODE_CEILING_MAX = 225;
+    static MODE_LWALL_MIN = 225; // Left wall: 225° - 315°
+    static MODE_LWALL_MAX = 315;
+    // Loop Requirements
+    static LOOP_SPEED_THRESHOLD = 4.0; // Minimum speed to stay in loop
     // Collision
     static SENSOR_WIDTH = 9; // Width between ground sensors
     static SENSOR_HEIGHT = 20; // Height of side sensors

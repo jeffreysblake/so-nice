@@ -71,6 +71,7 @@ export class GameScene extends Phaser.Scene {
 
   private updateDebugInfo() {
     const state = this.player.getPhysicsState();
+    const modeNames = ['FLOOR', 'RIGHT_WALL', 'CEILING', 'LEFT_WALL'];
     this.debugText.setText([
       `FPS: ${Math.round(this.game.loop.actualFps)}`,
       `Pos: (${Math.round(state.x)}, ${Math.round(state.y)})`,
@@ -79,6 +80,7 @@ export class GameScene extends Phaser.Scene {
       `State: ${this.player.getCurrentState()}`,
       `Grounded: ${state.isGrounded}`,
       `Angle: ${state.groundAngle}°`,
+      `Gravity Mode: ${modeNames[state.groundMode]}`,
       '',
       'Controls:',
       'Arrow Keys: Move',

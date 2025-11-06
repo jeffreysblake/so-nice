@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { PhysicsConstants } from '../config/PhysicsConstants';
 import { PlayerState, GroundMode, } from '../types/SonicTypes';
+import { GravityUtils } from '../utils/GravityUtils';
 /**
  * Player - Sonic character with authentic physics
  */
@@ -108,50 +109,98 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         }
     }
     /**
-     * Check ground collision using sensor system
+     * Check ground collision using sensor system with gravity modes
      */
     checkGroundCollision() {
         if (!this.collisionManager)
             return;
-        const sensorY = this.y + this.heightRadius;
-        const groundResult = this.collisionManager.checkGroundSensors(this.x, sensorY, this.sensorWidth, this.physicsState.groundMode);
+        // Get sensor offsets based on current gravity mode
+        const sensorOffsets = GravityUtils.getSensorOffsets(this.physicsState.groundMode);
+        const groundResult = this.collisionManager.checkGroundSensors(this.x + sensorOffsets.primary.x, this.y + sensorOffsets.primary.y, this.sensorWidth, this.physicsState.groundMode);
         const wasGrounded = this.physicsState.isGrounded;
         if (groundResult.collided) {
             // We hit ground
-            if (!wasGrounded || this.physicsState.yVelocity >= 0) {
+            if (!wasGrounded || this.isFallingTowardsSurface()) {
                 // Landing or already on ground
                 this.physicsState.isGrounded = true;
                 this.physicsState.groundAngle = groundResult.angle;
-                // Snap to surface
-                this.y -= groundResult.distance;
-                // Landing: convert Y velocity to ground speed
-                if (!wasGrounded && this.physicsState.yVelocity > 0) {
-                    // Transfer vertical momentum when landing on slopes
-                    const angleRad = (groundResult.angle * Math.PI) / 180;
-                    const slopeFactor = Math.sin(angleRad);
-                    this.physicsState.groundSpeed += this.physicsState.yVelocity * slopeFactor * 0.5;
+                // Update gravity mode based on new angle
+                this.physicsState.groundMode = GravityUtils.getGravityModeFromAngle(groundResult.angle);
+                // Snap to surface (distance depends on mode)
+                this.adjustPositionToSurface(groundResult.distance, this.physicsState.groundMode);
+                // Landing: convert velocity to ground speed
+                if (!wasGrounded) {
+                    this.convertVelocityToGroundSpeed(groundResult.angle);
                 }
                 this.physicsState.yVelocity = 0;
                 this.physicsState.isJumping = false;
+            }
+            else {
+                // Already grounded - check if we should update mode
+                if (wasGrounded) {
+                    this.physicsState.groundAngle = groundResult.angle;
+                    const newMode = GravityUtils.getGravityModeFromAngle(groundResult.angle);
+                    if (newMode !== this.physicsState.groundMode) {
+                        this.physicsState.groundMode = newMode;
+                    }
+                    // Check if we should fall off due to insufficient speed or bad angle
+                    if (GravityUtils.shouldFallOff(this.physicsState.groundSpeed, this.physicsState.groundAngle, this.physicsState.groundMode)) {
+                        this.detachFromSurface();
+                    }
+                }
             }
         }
         else {
             // No ground detected
             if (wasGrounded && !this.physicsState.isJumping) {
-                // Check if we should fall (angle too steep or walked off edge)
-                const angle = Math.abs(this.physicsState.groundAngle);
-                if (angle > PhysicsConstants.FALL_ANGLE && angle < (360 - PhysicsConstants.FALL_ANGLE)) {
-                    // Convert ground speed to air velocity when falling
-                    const angleRad = (this.physicsState.groundAngle * Math.PI) / 180;
-                    this.physicsState.xVelocity = this.physicsState.groundSpeed * Math.cos(angleRad);
-                    this.physicsState.yVelocity = this.physicsState.groundSpeed * Math.sin(angleRad);
-                    this.physicsState.isGrounded = false;
-                }
+                this.detachFromSurface();
             }
             if (!this.physicsState.isJumping && groundResult.distance > 4) {
                 this.physicsState.isGrounded = false;
             }
         }
+    }
+    /**
+     * Check if player is falling towards the current surface
+     */
+    isFallingTowardsSurface() {
+        const gravityVec = GravityUtils.getGravityVector(this.physicsState.groundMode);
+        // Check if velocity component in gravity direction is positive
+        const velocityInGravityDir = this.physicsState.xVelocity * gravityVec.x +
+            this.physicsState.yVelocity * gravityVec.y;
+        return velocityInGravityDir > 0;
+    }
+    /**
+     * Adjust position to snap to surface based on gravity mode
+     */
+    adjustPositionToSurface(distance, mode) {
+        const gravityVec = GravityUtils.getGravityVector(mode);
+        // Move opposite to gravity direction
+        this.x -= gravityVec.x * distance;
+        this.y -= gravityVec.y * distance;
+    }
+    /**
+     * Convert air velocity to ground speed when landing
+     */
+    convertVelocityToGroundSpeed(angle) {
+        const angleRad = (angle * Math.PI) / 180;
+        // Project current velocity onto the surface direction
+        const surfaceX = Math.cos(angleRad);
+        const surfaceY = Math.sin(angleRad);
+        // Dot product gives speed along surface
+        const speedAlongSurface = this.physicsState.xVelocity * surfaceX +
+            this.physicsState.yVelocity * surfaceY;
+        this.physicsState.groundSpeed = speedAlongSurface;
+    }
+    /**
+     * Detach from surface and convert to air physics
+     */
+    detachFromSurface() {
+        const angleRad = (this.physicsState.groundAngle * Math.PI) / 180;
+        this.physicsState.xVelocity = this.physicsState.groundSpeed * Math.cos(angleRad);
+        this.physicsState.yVelocity = this.physicsState.groundSpeed * Math.sin(angleRad);
+        this.physicsState.isGrounded = false;
+        this.physicsState.groundMode = GroundMode.FLOOR; // Reset to floor mode when in air
     }
     /**
      * Apply slope physics (slope factor affects ground speed)
