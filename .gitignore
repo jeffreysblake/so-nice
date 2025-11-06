@@ -26,9 +26,5 @@ Thumbs.db
 # Reference repos (for study only)
 reference/
 
-# Game assets (copyrighted sprites - must download individually)
-public/assets/**/*.png
-public/assets/**/*.jpg
-public/assets/**/*.gif
 # Keep directory structure and READMEs
 !public/assets/README.md
