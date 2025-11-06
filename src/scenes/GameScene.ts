@@ -1,13 +1,16 @@
 import Phaser from 'phaser';
 import { Player } from '../entities/Player';
+import { TerrainManager } from '../terrain/TerrainManager';
 
 /**
  * GameScene - Main gameplay scene
  */
 export class GameScene extends Phaser.Scene {
   private player!: Player;
+  private terrainManager!: TerrainManager;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private debugText!: Phaser.GameObjects.Text;
+  private debugKey!: Phaser.Input.Keyboard.Key;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -17,11 +20,13 @@ export class GameScene extends Phaser.Scene {
     // Set up physics world
     this.physics.world.setBounds(0, 0, 3840, 672);  // 4x screen width for scrolling
 
-    // Create temporary ground platform
-    this.createTestLevel();
+    // Create terrain system
+    this.terrainManager = new TerrainManager(this);
+    this.terrainManager.buildTestLevel();
 
     // Create player
-    this.player = new Player(this, 100, 300);
+    this.player = new Player(this, 100, 600);
+    this.player.setCollisionManager(this.terrainManager.getCollisionManager());
 
     // Set up camera
     this.cameras.main.setBounds(0, 0, 3840, 672);
@@ -29,6 +34,9 @@ export class GameScene extends Phaser.Scene {
 
     // Set up input
     this.cursors = this.input.keyboard!.createCursorKeys();
+    this.debugKey = this.input.keyboard!.addKey(
+      Phaser.Input.Keyboard.KeyCodes.D
+    );
 
     // Debug text
     this.debugText = this.add.text(10, 10, '', {
@@ -49,31 +57,16 @@ export class GameScene extends Phaser.Scene {
     // Update player with input
     this.player.update(time, delta, this.cursors);
 
+    // Update terrain (for debug rendering)
+    this.terrainManager.update();
+
+    // Toggle debug mode
+    if (Phaser.Input.Keyboard.JustDown(this.debugKey)) {
+      this.terrainManager.toggleDebug();
+    }
+
     // Update debug info
     this.updateDebugInfo();
-  }
-
-  private createTestLevel() {
-    // Create a simple test platform for initial physics testing
-    const platforms = this.physics.add.staticGroup();
-
-    // Ground
-    for (let x = 0; x < 120; x++) {
-      const tile = platforms.create(x * 32 + 16, 650, 'ground-tile');
-      tile.setOrigin(0.5, 0.5);
-    }
-
-    // Some platforms at different heights
-    for (let x = 10; x < 20; x++) {
-      platforms.create(x * 32 + 16, 500, 'ground-tile');
-    }
-
-    for (let x = 30; x < 40; x++) {
-      platforms.create(x * 32 + 16, 400, 'ground-tile');
-    }
-
-    // Store reference for collision
-    this.physics.add.collider(this.player, platforms);
   }
 
   private updateDebugInfo() {
@@ -91,6 +84,7 @@ export class GameScene extends Phaser.Scene {
       'Arrow Keys: Move',
       'Z: Jump',
       'Down: Roll (when moving)',
+      'D: Toggle Debug',
     ].join('\n'));
   }
 }

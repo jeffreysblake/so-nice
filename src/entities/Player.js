@@ -7,9 +7,14 @@ import { PlayerState, GroundMode, } from '../types/SonicTypes';
 export class Player extends Phaser.Physics.Arcade.Sprite {
     // Physics state
     physicsState;
+    // Collision system
+    collisionManager = null;
     // Input tracking
     jumpKey;
     rollKey;
+    // Sensor dimensions
+    sensorWidth = 9;
+    heightRadius = 20;
     constructor(scene, x, y) {
         super(scene, x, y, 'sonic-placeholder');
         // Add to scene
@@ -35,17 +40,24 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         // Set up sprite properties
         this.setOrigin(0.5, 0.5);
         this.setCollideWorldBounds(true);
-        // Set up arcade physics body
+        // Set up arcade physics body - we'll use it for basic movement but not collision
         if (this.body) {
             const body = this.body;
             body.setSize(20, 32);
             body.setOffset(6, 0);
             body.setMaxVelocity(PhysicsConstants.MAX_X_VELOCITY * 60, PhysicsConstants.MAX_Y_VELOCITY * 60);
-            // Disable default gravity - we'll handle it manually
+            // Disable default gravity and collision - we'll handle it manually
             body.setAllowGravity(false);
+            body.setCollideWorldBounds(false);
         }
         // Set up input
         this.setupInput(scene);
+    }
+    /**
+     * Set the collision manager (called by GameScene)
+     */
+    setCollisionManager(manager) {
+        this.collisionManager = manager;
     }
     setupInput(scene) {
         if (scene.input.keyboard) {
@@ -54,24 +66,26 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         }
     }
     update(_time, delta, cursors) {
+        if (!this.collisionManager)
+            return;
         // Normalize delta to expected frame time (60 FPS)
         const deltaNormalized = delta / PhysicsConstants.FIXED_TIMESTEP;
         // Update control lock
         if (this.physicsState.controlLock > 0) {
             this.physicsState.controlLock--;
         }
-        // Check if grounded (using Phaser's built-in collision)
-        const body = this.body;
-        this.physicsState.isGrounded = body.touching.down;
+        // Check ground collision using sensors
+        this.checkGroundCollision();
         if (this.physicsState.isGrounded) {
             this.updateGroundMovement(cursors, deltaNormalized);
+            this.applySlopePhysics(deltaNormalized);
             this.checkJump();
         }
         else {
             this.updateAirMovement(cursors, deltaNormalized);
         }
-        // Apply velocity to sprite
-        this.applyVelocity();
+        // Move the player
+        this.movePlayer(deltaNormalized);
         // Update position in physics state
         this.physicsState.x = this.x;
         this.physicsState.y = this.y;
@@ -84,18 +98,95 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             this.setFlipX(true);
             this.physicsState.isFacingRight = false;
         }
+        // Update sprite rotation based on ground angle
+        if (this.physicsState.isGrounded) {
+            this.setAngle(this.physicsState.groundAngle);
+        }
+        else {
+            // Smoothly rotate back to 0 in air
+            this.setAngle(Phaser.Math.Linear(this.angle, 0, 0.2));
+        }
+    }
+    /**
+     * Check ground collision using sensor system
+     */
+    checkGroundCollision() {
+        if (!this.collisionManager)
+            return;
+        const sensorY = this.y + this.heightRadius;
+        const groundResult = this.collisionManager.checkGroundSensors(this.x, sensorY, this.sensorWidth, this.physicsState.groundMode);
+        const wasGrounded = this.physicsState.isGrounded;
+        if (groundResult.collided) {
+            // We hit ground
+            if (!wasGrounded || this.physicsState.yVelocity >= 0) {
+                // Landing or already on ground
+                this.physicsState.isGrounded = true;
+                this.physicsState.groundAngle = groundResult.angle;
+                // Snap to surface
+                this.y -= groundResult.distance;
+                // Landing: convert Y velocity to ground speed
+                if (!wasGrounded && this.physicsState.yVelocity > 0) {
+                    // Transfer vertical momentum when landing on slopes
+                    const angleRad = (groundResult.angle * Math.PI) / 180;
+                    const slopeFactor = Math.sin(angleRad);
+                    this.physicsState.groundSpeed += this.physicsState.yVelocity * slopeFactor * 0.5;
+                }
+                this.physicsState.yVelocity = 0;
+                this.physicsState.isJumping = false;
+            }
+        }
+        else {
+            // No ground detected
+            if (wasGrounded && !this.physicsState.isJumping) {
+                // Check if we should fall (angle too steep or walked off edge)
+                const angle = Math.abs(this.physicsState.groundAngle);
+                if (angle > PhysicsConstants.FALL_ANGLE && angle < (360 - PhysicsConstants.FALL_ANGLE)) {
+                    // Convert ground speed to air velocity when falling
+                    const angleRad = (this.physicsState.groundAngle * Math.PI) / 180;
+                    this.physicsState.xVelocity = this.physicsState.groundSpeed * Math.cos(angleRad);
+                    this.physicsState.yVelocity = this.physicsState.groundSpeed * Math.sin(angleRad);
+                    this.physicsState.isGrounded = false;
+                }
+            }
+            if (!this.physicsState.isJumping && groundResult.distance > 4) {
+                this.physicsState.isGrounded = false;
+            }
+        }
+    }
+    /**
+     * Apply slope physics (slope factor affects ground speed)
+     */
+    applySlopePhysics(delta) {
+        const angle = this.physicsState.groundAngle;
+        // Only apply slope physics if on a slope
+        if (angle !== 0 && angle !== 180) {
+            const angleRad = (angle * Math.PI) / 180;
+            const slopeFactor = this.physicsState.isRolling
+                ? PhysicsConstants.SLOPE_FACTOR_ROLLDOWN
+                : PhysicsConstants.SLOPE_FACTOR_NORMAL;
+            // Apply slope factor: downhill adds speed, uphill removes speed
+            this.physicsState.groundSpeed -= slopeFactor * Math.sin(angleRad) * delta;
+        }
+    }
+    /**
+     * Move player based on ground speed and angle
+     */
+    movePlayer(delta) {
+        if (this.physicsState.isGrounded) {
+            // Move along ground based on angle
+            const angleRad = (this.physicsState.groundAngle * Math.PI) / 180;
+            this.physicsState.xVelocity = this.physicsState.groundSpeed * Math.cos(angleRad);
+            this.physicsState.yVelocity = this.physicsState.groundSpeed * Math.sin(angleRad);
+        }
+        // Apply movement
+        this.x += this.physicsState.xVelocity * delta;
+        this.y += this.physicsState.yVelocity * delta;
     }
     /**
      * Ground movement with authentic Sonic physics
      */
     updateGroundMovement(cursors, delta) {
         const { ACCELERATION, DECELERATION, FRICTION, TOP_SPEED } = PhysicsConstants;
-        // Reset air velocity when landing
-        if (!this.physicsState.isGrounded && this.body.touching.down) {
-            this.physicsState.isGrounded = true;
-            this.physicsState.yVelocity = 0;
-            this.physicsState.isJumping = false;
-        }
         const controlsLocked = this.physicsState.controlLock > 0;
         // Left/Right input
         if (!controlsLocked) {
@@ -147,8 +238,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
                 this.physicsState.isRolling = false;
             }
         }
-        // Convert ground speed to x velocity
-        this.physicsState.xVelocity = this.physicsState.groundSpeed;
     }
     /**
      * Air movement with reduced control
@@ -188,23 +277,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         if (Phaser.Input.Keyboard.JustDown(this.jumpKey) &&
             this.physicsState.isGrounded &&
             !this.physicsState.isJumping) {
-            // Set jump velocity
-            this.physicsState.yVelocity = -PhysicsConstants.JUMP_FORCE;
+            // Jump perpendicular to surface
+            const angleRad = (this.physicsState.groundAngle * Math.PI) / 180;
+            const jumpForce = PhysicsConstants.JUMP_FORCE;
+            // Jump direction is perpendicular to ground angle
+            this.physicsState.xVelocity = this.physicsState.groundSpeed - jumpForce * Math.sin(angleRad);
+            this.physicsState.yVelocity = -jumpForce * Math.cos(angleRad);
             this.physicsState.isJumping = true;
             this.physicsState.isGrounded = false;
-            // Preserve horizontal momentum
-            this.physicsState.xVelocity = this.physicsState.groundSpeed;
-            console.log('Jump!');
+            console.log('Jump!', { angle: this.physicsState.groundAngle });
         }
-    }
-    /**
-     * Apply calculated velocities to the sprite
-     */
-    applyVelocity() {
-        const body = this.body;
-        // Convert our velocity (pixels per frame) to Phaser's velocity (pixels per second)
-        body.setVelocityX(this.physicsState.xVelocity * PhysicsConstants.FPS);
-        body.setVelocityY(this.physicsState.yVelocity * PhysicsConstants.FPS);
     }
     /**
      * Get current physics state (for debugging)
