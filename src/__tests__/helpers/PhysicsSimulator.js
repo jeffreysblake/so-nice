@@ -169,10 +169,19 @@ export class PhysicsSimulator {
         const angle = this.state.groundAngle;
         if (angle !== 0 && angle !== 180) {
             const angleRad = (angle * Math.PI) / 180;
-            const slopeFactor = this.state.isRolling
-                ? PhysicsConstants.SLOPE_FACTOR_ROLLDOWN
-                : PhysicsConstants.SLOPE_FACTOR_NORMAL;
-            this.state.groundSpeed -= slopeFactor * Math.sin(angleRad) * delta;
+            const sinAngle = Math.sin(angleRad);
+            let slopeFactor;
+            if (this.state.isRolling) {
+                // Uphill (negative sine): use weaker factor for rolling uphill
+                // Downhill (positive sine): use stronger factor for rolling downhill
+                slopeFactor = sinAngle < 0
+                    ? PhysicsConstants.SLOPE_FACTOR_ROLLUP
+                    : PhysicsConstants.SLOPE_FACTOR_ROLLDOWN;
+            }
+            else {
+                slopeFactor = PhysicsConstants.SLOPE_FACTOR_NORMAL;
+            }
+            this.state.groundSpeed -= slopeFactor * sinAngle * delta;
         }
     }
     /**

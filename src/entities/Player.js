@@ -16,7 +16,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Sensor dimensions
     sensorWidth = 9;
     constructor(scene, x, y) {
-        super(scene, x, y, 'sonic-placeholder');
+        // Use Sonic spritesheet if available, fallback to placeholder
+        const texture = scene.textures.exists('sonic-spritesheet')
+            ? 'sonic-spritesheet'
+            : 'sonic-placeholder';
+        super(scene, x, y, texture);
         // Add to scene
         scene.add.existing(this);
         scene.physics.add.existing(this);
@@ -40,6 +44,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         // Set up sprite properties
         this.setOrigin(0.5, 0.5);
         this.setCollideWorldBounds(true);
+        // Scale sprite to reasonable size if using spritesheet
+        // The full spritesheet is 690x1558, we want roughly 32x32 for the player
+        if (texture === 'sonic-spritesheet') {
+            this.setScale(0.05); // Scale down the large spritesheet
+        }
         // Set up arcade physics body - we'll use it for basic movement but not collision
         if (this.body) {
             const body = this.body;

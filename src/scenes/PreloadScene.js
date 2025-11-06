@@ -37,36 +37,42 @@ export class PreloadScene extends Phaser.Scene {
             loadingText.destroy();
             percentText.destroy();
         });
-        // TODO: Load assets here
-        // For now, we'll create placeholder assets in the create method
-        // this.load.image('sonic-idle', 'assets/sprites/sonic/idle.png');
-        // this.load.spritesheet('sonic-run', 'assets/sprites/sonic/run.png', {
-        //   frameWidth: 32,
-        //   frameHeight: 32,
-        // });
-        // this.load.image('tiles', 'assets/tilesets/green-hill.png');
-        // this.load.tilemapTiledJSON('level1', 'assets/levels/level1.json');
+        // Load Sonic sprites
+        // The Sonic spritesheet from Spriters Resource (690x1558px)
+        // Contains various animations: idle, walk, run, jump, roll, etc.
+        // For now, load as atlas - we'll configure specific frames later
+        this.load.image('sonic-spritesheet', 'assets/sprites/sonic/sonic-spritesheet.png');
+        // Load Green Hill Zone tileset
+        // Contains grass, dirt, slopes, loops, platforms (1360x3184px)
+        this.load.image('ghz-tileset', 'assets/tilesets/green-hill-zone.png');
+        // Load HUD overlay
+        // Contains numbers, letters, UI text (708x632px)
+        this.load.image('hud-overlay', 'assets/sprites/ui/hud-overlay.png');
+        console.log('Loading Sonic sprites from assets/');
     }
     create() {
-        // Create placeholder graphics for development
-        this.createPlaceholderAssets();
+        // Verify sprites loaded successfully
+        const sonicLoaded = this.textures.exists('sonic-spritesheet');
+        const tilesetLoaded = this.textures.exists('ghz-tileset');
+        const hudLoaded = this.textures.exists('hud-overlay');
+        console.log('Sprite loading status:');
+        console.log('  Sonic:', sonicLoaded ? '✓' : '✗');
+        console.log('  Tileset:', tilesetLoaded ? '✓' : '✗');
+        console.log('  HUD:', hudLoaded ? '✓' : '✗');
+        // Create fallback placeholder if sprites didn't load
+        if (!sonicLoaded) {
+            console.warn('Sonic sprite not loaded, creating placeholder');
+            this.createPlaceholderSonic();
+        }
         // Start the main game scene
         this.scene.start('GameScene');
     }
-    createPlaceholderAssets() {
+    createPlaceholderSonic() {
         // Create a simple colored square for Sonic placeholder
         const graphics = this.add.graphics();
         graphics.fillStyle(0x0066ff, 1);
         graphics.fillCircle(16, 16, 16);
         graphics.generateTexture('sonic-placeholder', 32, 32);
         graphics.destroy();
-        // Create ground tile placeholder
-        const groundGraphics = this.add.graphics();
-        groundGraphics.fillStyle(0x8b4513, 1);
-        groundGraphics.fillRect(0, 0, 32, 32);
-        groundGraphics.lineStyle(1, 0x654321, 1);
-        groundGraphics.strokeRect(0, 0, 32, 32);
-        groundGraphics.generateTexture('ground-tile', 32, 32);
-        groundGraphics.destroy();
     }
 }
