@@ -14,7 +14,6 @@ export class GameScene extends Phaser.Scene {
     springs = [];
     rings = [];
     enemies = [];
-    ringCount = 0;
     cursors;
     debugText;
     hudText;
@@ -87,7 +86,19 @@ export class GameScene extends Phaser.Scene {
             if (ring.checkPlayerCollision(this.player.x, this.player.y, 20)) {
                 ring.onPlayerInteract(this.player);
                 if (ring.isCollected()) {
-                    this.ringCount++;
+                    this.player.collectRing();
+                    this.updateHUD();
+                }
+            }
+            ring.update(time, delta);
+        });
+        // Update scattered rings (from damage) and check for collection
+        const scatteredRings = this.player.getDamageSystem().getScatteredRings();
+        scatteredRings.forEach(ring => {
+            if (ring.checkPlayerCollision(this.player.x, this.player.y, 20)) {
+                ring.onPlayerInteract(this.player);
+                if (ring.isCollected()) {
+                    this.player.collectRing();
                     this.updateHUD();
                 }
             }
@@ -130,7 +141,7 @@ export class GameScene extends Phaser.Scene {
         ].join('\n'));
     }
     updateHUD() {
-        this.hudText.setText(`RINGS: ${this.ringCount}`);
+        this.hudText.setText(`RINGS: ${this.player.getRingCount()}`);
     }
     createRings() {
         // Starting area - line of rings

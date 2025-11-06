@@ -101,15 +101,16 @@ export abstract class Enemy extends GameObject {
   /**
    * Damage the player
    */
-  protected damagePlayer(_player: any): void {
-    // This will be implemented when damage system is added
-    console.log(`${this.constructor.name} hit player!`);
+  protected damagePlayer(player: any): void {
+    // Calculate knockback direction (away from enemy)
+    const knockbackDirection = player.x < this.x ? -1 : 1;
 
-    // TODO: Implement damage system
-    // - Check if player has rings
-    // - Scatter rings
-    // - Apply invincibility frames
-    // - Play damage sound
+    // Apply damage through player's damage system
+    const damaged = player.takeDamage(knockbackDirection);
+
+    if (damaged) {
+      console.log(`${this.constructor.name} hit player! Rings scattered.`);
+    }
   }
 
   /**

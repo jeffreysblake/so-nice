@@ -3,6 +3,7 @@ import { PhysicsConstants } from '../config/PhysicsConstants';
 import { PlayerState, GroundMode, } from '../types/SonicTypes';
 import { GravityUtils } from '../utils/GravityUtils';
 import { getSonicAnimationForState } from '../config/SonicAnimations';
+import { DamageSystem } from '../systems/DamageSystem';
 /**
  * Player - Sonic character with authentic physics
  */
@@ -11,6 +12,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     physicsState;
     // Collision system
     collisionManager = null;
+    // Damage system
+    damageSystem;
+    ringCount = 0;
     // Input tracking
     jumpKey;
     rollKey;
@@ -61,6 +65,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         }
         // Set up input
         this.setupInput(scene);
+        // Initialize damage system
+        this.damageSystem = new DamageSystem(scene);
     }
     /**
      * Set the collision manager (called by GameScene)
@@ -79,9 +85,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             return;
         // Normalize delta to expected frame time (60 FPS)
         const deltaNormalized = delta / PhysicsConstants.FIXED_TIMESTEP;
+        // Update damage system
+        this.damageSystem.update(deltaNormalized);
         // Update control lock
         if (this.physicsState.controlLock > 0) {
             this.physicsState.controlLock--;
+        }
+        // Handle invincibility visual effect (blinking)
+        if (this.isInvincible()) {
+            // Blink every 4 frames
+            const blinkFrame = Math.floor(_time / 66); // ~15 blinks per second
+            this.setAlpha(blinkFrame % 2 === 0 ? 0.3 : 1.0);
+        }
+        else {
+            this.setAlpha(1.0);
         }
         // Check ground collision using sensors
         this.checkGroundCollision();
@@ -383,5 +400,48 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
             return PlayerState.WALKING;
         }
         return PlayerState.IDLE;
+    }
+    /**
+     * Take damage from enemy or hazard
+     * Returns true if damage was applied
+     */
+    takeDamage(knockbackDirection = 1) {
+        const result = this.damageSystem.applyDamage(this.x, this.y, this.ringCount, knockbackDirection);
+        if (result.damaged) {
+            // Reset ring count
+            this.ringCount = 0;
+            // Apply knockback
+            this.physicsState.xVelocity = result.knockbackX;
+            this.physicsState.yVelocity = result.knockbackY;
+            this.physicsState.isGrounded = false;
+            this.physicsState.isJumping = true;
+            // Reset control lock to prevent immediate input
+            this.physicsState.controlLock = 30; // Half second
+        }
+        return result.damaged;
+    }
+    /**
+     * Collect a ring
+     */
+    collectRing() {
+        this.ringCount++;
+    }
+    /**
+     * Get current ring count
+     */
+    getRingCount() {
+        return this.ringCount;
+    }
+    /**
+     * Check if player is invincible
+     */
+    isInvincible() {
+        return this.damageSystem.isInvincible();
+    }
+    /**
+     * Get damage system (for accessing scattered rings)
+     */
+    getDamageSystem() {
+        return this.damageSystem;
     }
 }

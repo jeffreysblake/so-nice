@@ -83,14 +83,14 @@ export class Enemy extends GameObject {
     /**
      * Damage the player
      */
-    damagePlayer(_player) {
-        // This will be implemented when damage system is added
-        console.log(`${this.constructor.name} hit player!`);
-        // TODO: Implement damage system
-        // - Check if player has rings
-        // - Scatter rings
-        // - Apply invincibility frames
-        // - Play damage sound
+    damagePlayer(player) {
+        // Calculate knockback direction (away from enemy)
+        const knockbackDirection = player.x < this.x ? -1 : 1;
+        // Apply damage through player's damage system
+        const damaged = player.takeDamage(knockbackDirection);
+        if (damaged) {
+            console.log(`${this.constructor.name} hit player! Rings scattered.`);
+        }
     }
     update(_time, delta) {
         if (this.destroyed)
