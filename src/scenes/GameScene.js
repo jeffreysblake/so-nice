@@ -3,6 +3,8 @@ import { Player } from '../entities/Player';
 import { TerrainManager } from '../terrain/TerrainManager';
 import { Spring, SpringType, SpringOrientation } from '../objects/Spring';
 import { Ring } from '../objects/Ring';
+import { Motobug } from '../objects/Motobug';
+import { Crabmeat } from '../objects/Crabmeat';
 /**
  * GameScene - Main gameplay scene
  */
@@ -11,6 +13,7 @@ export class GameScene extends Phaser.Scene {
     terrainManager;
     springs = [];
     rings = [];
+    enemies = [];
     ringCount = 0;
     cursors;
     debugText;
@@ -37,6 +40,8 @@ export class GameScene extends Phaser.Scene {
         this.springs.push(new Spring(this, 168 * 16, 41 * 16, SpringType.YELLOW, SpringOrientation.UP));
         // Create rings throughout the level
         this.createRings();
+        // Create enemies
+        this.createEnemies();
         // Set up camera
         this.cameras.main.setBounds(0, 0, 3840, 672);
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
@@ -87,6 +92,13 @@ export class GameScene extends Phaser.Scene {
                 }
             }
             ring.update(time, delta);
+        });
+        // Update enemies and check for collisions
+        this.enemies.forEach(enemy => {
+            if (enemy.checkPlayerCollision(this.player.x, this.player.y, 20)) {
+                enemy.onPlayerInteract(this.player);
+            }
+            enemy.update(time, delta);
         });
         // Update terrain (for debug rendering)
         this.terrainManager.update();
@@ -165,5 +177,35 @@ export class GameScene extends Phaser.Scene {
             this.rings.push(new Ring(this, (200 + i * 2) * 16, 39 * 16));
         }
         console.log(`Created ${this.rings.length} rings in the level`);
+    }
+    createEnemies() {
+        // Starting area - a few Motobugs
+        this.enemies.push(new Motobug(this, 30 * 16, 38 * 16));
+        this.enemies.push(new Motobug(this, 50 * 16, 38 * 16));
+        // Before first loop - Crabmeat
+        this.enemies.push(new Crabmeat(this, 35 * 16, 38 * 16));
+        // After first loop on high path - Motobug patrol
+        this.enemies.push(new Motobug(this, 70 * 16, 32 * 16));
+        this.enemies.push(new Motobug(this, 85 * 16, 32 * 16));
+        // Low path - Crabmeat guarding rings
+        this.enemies.push(new Crabmeat(this, 75 * 16, 40 * 16));
+        // Downhill run area - scattered enemies
+        this.enemies.push(new Motobug(this, 100 * 16, 39 * 16));
+        this.enemies.push(new Crabmeat(this, 108 * 16, 35 * 16));
+        // Valley area - enemy cluster
+        this.enemies.push(new Motobug(this, 118 * 16, 47 * 16));
+        this.enemies.push(new Crabmeat(this, 125 * 16, 47 * 16));
+        this.enemies.push(new Motobug(this, 130 * 16, 47 * 16));
+        // Before second loop - guards
+        this.enemies.push(new Motobug(this, 140 * 16, 38 * 16));
+        this.enemies.push(new Crabmeat(this, 145 * 16, 38 * 16));
+        // Platform section - challenging placement
+        this.enemies.push(new Motobug(this, 162 * 16, 35 * 16));
+        this.enemies.push(new Crabmeat(this, 172 * 16, 37 * 16));
+        // Near goal - final challenge
+        this.enemies.push(new Motobug(this, 190 * 16, 39 * 16));
+        this.enemies.push(new Crabmeat(this, 195 * 16, 39 * 16));
+        this.enemies.push(new Motobug(this, 200 * 16, 39 * 16));
+        console.log(`Created ${this.enemies.length} enemies in the level`);
     }
 }
