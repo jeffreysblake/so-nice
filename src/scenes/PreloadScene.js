@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { initializeSonicAnimations } from '../config/SonicAnimations';
 /**
  * PreloadScene - Loads all game assets
  */
@@ -63,6 +64,11 @@ export class PreloadScene extends Phaser.Scene {
         if (!sonicLoaded) {
             console.warn('Sonic sprite not loaded, creating placeholder');
             this.createPlaceholderSonic();
+        }
+        else {
+            // Initialize Sonic animations from spritesheet
+            console.log('Initializing Sonic animations...');
+            initializeSonicAnimations(this, 'sonic-spritesheet');
         }
         // Start the main game scene
         this.scene.start('GameScene');

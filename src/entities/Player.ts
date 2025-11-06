@@ -7,6 +7,7 @@ import {
 } from '../types/SonicTypes';
 import { CollisionManager } from '../terrain/CollisionManager';
 import { GravityUtils } from '../utils/GravityUtils';
+import { getSonicAnimationForState } from '../config/SonicAnimations';
 
 /**
  * Player - Sonic character with authentic physics
@@ -58,10 +59,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setOrigin(0.5, 0.5);
     this.setCollideWorldBounds(true);
 
-    // Scale sprite to reasonable size if using spritesheet
-    // The full spritesheet is 690x1558, we want roughly 32x32 for the player
-    if (texture === 'sonic-spritesheet') {
-      this.setScale(0.05); // Scale down the large spritesheet
+    // Start with idle animation if available
+    if (texture === 'sonic-spritesheet' && scene.anims.exists('sonic-idle')) {
+      this.play('sonic-idle');
     }
 
     // Set up arcade physics body - we'll use it for basic movement but not collision
@@ -148,6 +148,28 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     } else {
       // Smoothly rotate back to 0 in air
       this.setAngle(Phaser.Math.Linear(this.angle, 0, 0.2));
+    }
+
+    // Update animation based on state
+    this.updateAnimation();
+  }
+
+  /**
+   * Update animation based on player state
+   */
+  private updateAnimation(): void {
+    const animationName = getSonicAnimationForState(
+      this.physicsState.isGrounded,
+      this.physicsState.isRolling,
+      this.physicsState.isJumping,
+      this.physicsState.groundSpeed
+    );
+
+    // Only change animation if it's different from current
+    if (this.anims.currentAnim && this.anims.currentAnim.key !== animationName) {
+      this.play(animationName, true);
+    } else if (!this.anims.currentAnim) {
+      this.play(animationName, true);
     }
   }
 
