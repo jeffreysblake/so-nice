@@ -7,6 +7,7 @@ import { Motobug } from '../objects/Motobug';
 import { Crabmeat } from '../objects/Crabmeat';
 import { LifeSystem } from '../systems/LifeSystem';
 import { ScoreSystem } from '../systems/ScoreSystem';
+import { GoalPost } from '../objects/GoalPost';
 /**
  * GameScene - Main gameplay scene
  */
@@ -18,6 +19,8 @@ export class GameScene extends Phaser.Scene {
     springs = [];
     rings = [];
     enemies = [];
+    goalPost;
+    levelComplete = false;
     cursors;
     debugText;
     hudText;
@@ -54,6 +57,8 @@ export class GameScene extends Phaser.Scene {
         this.createRings();
         // Create enemies
         this.createEnemies();
+        // Create goal post at end of level
+        this.goalPost = new GoalPost(this, 210 * 16, 39 * 16);
         // Set up camera
         this.cameras.main.setBounds(0, 0, 3840, 672);
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
@@ -126,6 +131,12 @@ export class GameScene extends Phaser.Scene {
             }
             enemy.update(time, delta);
         });
+        // Check goal post collision
+        if (!this.levelComplete && this.goalPost.checkPlayerCollision(this.player.x, this.player.y, 20)) {
+            this.goalPost.onPlayerInteract(this.player);
+            this.onLevelComplete();
+        }
+        this.goalPost.update(time, delta);
         // Update terrain (for debug rendering)
         this.terrainManager.update();
         // Toggle debug mode
@@ -205,6 +216,64 @@ export class GameScene extends Phaser.Scene {
         gameOverText.setDepth(2000);
         // Wait 3 seconds then restart
         this.time.delayedCall(3000, () => {
+            this.scene.restart();
+        });
+    }
+    /**
+     * Handle level completion
+     */
+    onLevelComplete() {
+        if (this.levelComplete)
+            return;
+        this.levelComplete = true;
+        console.log('Level Complete!');
+        // Stop the timer
+        this.scoreSystem.stop();
+        // Calculate bonuses
+        const ringBonus = this.scoreSystem.calculateRingBonus(this.player.getRingCount());
+        const timeBonus = this.scoreSystem.calculateTimeBonus();
+        const totalBonus = ringBonus + timeBonus;
+        // Add bonuses to score
+        this.scoreSystem.addPoints(totalBonus);
+        // Show level clear screen
+        const clearText = this.add.text(this.cameras.main.width / 2, this.cameras.main.height / 2 - 100, 'LEVEL CLEAR!', {
+            fontSize: '48px',
+            color: '#ffff00',
+            fontFamily: 'Arial',
+            stroke: '#000000',
+            strokeThickness: 6,
+        });
+        clearText.setOrigin(0.5);
+        clearText.setScrollFactor(0);
+        clearText.setDepth(2000);
+        // Show bonus breakdown
+        const bonusText = this.add.text(this.cameras.main.width / 2, this.cameras.main.height / 2, [
+            `RING BONUS: ${ringBonus}`,
+            `TIME BONUS: ${timeBonus}`,
+            `TOTAL SCORE: ${this.scoreSystem.getScore()}`,
+        ].join('\n'), {
+            fontSize: '24px',
+            color: '#ffffff',
+            fontFamily: 'Arial',
+            stroke: '#000000',
+            strokeThickness: 4,
+            align: 'center',
+            lineSpacing: 10,
+        });
+        bonusText.setOrigin(0.5);
+        bonusText.setScrollFactor(0);
+        bonusText.setDepth(2000);
+        // Play celebration animation
+        this.tweens.add({
+            targets: clearText,
+            scale: 1.2,
+            yoyo: true,
+            duration: 500,
+            repeat: -1,
+        });
+        // Wait 5 seconds then restart (or move to next level)
+        this.time.delayedCall(5000, () => {
+            console.log('Restarting level...');
             this.scene.restart();
         });
     }
