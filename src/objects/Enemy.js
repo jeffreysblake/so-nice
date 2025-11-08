@@ -41,6 +41,10 @@ export class Enemy extends GameObject {
         if (this.isPlayerAttacking(player)) {
             // Player defeats enemy
             this.destroy();
+            // Notify player for scoring
+            if (player.notifyEnemyDefeat) {
+                player.notifyEnemyDefeat();
+            }
         }
         else {
             // Enemy damages player

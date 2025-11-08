@@ -6,6 +6,7 @@ import { Ring } from '../objects/Ring';
 import { Motobug } from '../objects/Motobug';
 import { Crabmeat } from '../objects/Crabmeat';
 import { LifeSystem } from '../systems/LifeSystem';
+import { ScoreSystem } from '../systems/ScoreSystem';
 /**
  * GameScene - Main gameplay scene
  */
@@ -13,6 +14,7 @@ export class GameScene extends Phaser.Scene {
     player;
     terrainManager;
     lifeSystem;
+    scoreSystem;
     springs = [];
     rings = [];
     enemies = [];
@@ -36,6 +38,11 @@ export class GameScene extends Phaser.Scene {
         this.lifeSystem = new LifeSystem(this, 100, 600);
         this.lifeSystem.setCallbacks(() => this.onPlayerDeath(), () => this.onPlayerRespawn(), () => this.onGameOver());
         this.player.setLifeSystem(this.lifeSystem);
+        // Create score system and start timer
+        this.scoreSystem = new ScoreSystem();
+        this.scoreSystem.start();
+        // Set player event callbacks for scoring
+        this.player.setEventCallbacks(() => this.scoreSystem.addRingPoints(), () => this.scoreSystem.addEnemyPoints());
         // Create springs at strategic locations
         // Spring at bottom of downhill run (launches player)
         this.springs.push(new Spring(this, 110 * 16, 46 * 16, SpringType.YELLOW, SpringOrientation.UP));
@@ -78,6 +85,8 @@ export class GameScene extends Phaser.Scene {
     update(time, delta) {
         if (!this.player)
             return;
+        // Update score system (timer)
+        this.scoreSystem.update(delta / (1000 / 60)); // Convert ms to frames
         // Update player with input
         this.player.update(time, delta, this.cursors);
         // Update springs and check for collisions
@@ -125,6 +134,8 @@ export class GameScene extends Phaser.Scene {
         }
         // Update debug info
         this.updateDebugInfo();
+        // Update HUD (for timer)
+        this.updateHUD();
     }
     updateDebugInfo() {
         const state = this.player.getPhysicsState();
@@ -148,13 +159,21 @@ export class GameScene extends Phaser.Scene {
     }
     updateHUD() {
         const lives = this.lifeSystem ? this.lifeSystem.getLives() : 3;
-        this.hudText.setText(`RINGS: ${this.player.getRingCount()}  LIVES: ${lives}`);
+        const score = this.scoreSystem ? this.scoreSystem.getScore() : 0;
+        const time = this.scoreSystem ? this.scoreSystem.getFormattedTime() : '0:00';
+        this.hudText.setText([
+            `SCORE: ${score}`,
+            `TIME: ${time}`,
+            `RINGS: ${this.player.getRingCount()}  LIVES: ${lives}`,
+        ].join('  '));
     }
     /**
      * Handle player death
      */
     onPlayerDeath() {
         console.log('GameScene: Player died');
+        // Stop the timer
+        this.scoreSystem.stop();
         // Disable player input
         // Play death music (if available)
     }
@@ -164,6 +183,8 @@ export class GameScene extends Phaser.Scene {
     onPlayerRespawn() {
         console.log('GameScene: Player respawning');
         this.player.respawn();
+        // Restart the timer
+        this.scoreSystem.start();
         this.updateHUD();
     }
     /**

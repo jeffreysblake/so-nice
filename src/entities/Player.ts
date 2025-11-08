@@ -28,6 +28,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // Life system
   private lifeSystem!: LifeSystem;
 
+  // Event callbacks
+  private onRingCollectCallback?: () => void;
+  private onEnemyDefeatCallback?: () => void;
+
   // Input tracking
   private jumpKey!: Phaser.Input.Keyboard.Key;
   private rollKey!: Phaser.Input.Keyboard.Key;
@@ -106,6 +110,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    */
   setLifeSystem(lifeSystem: LifeSystem): void {
     this.lifeSystem = lifeSystem;
+  }
+
+  /**
+   * Set event callbacks for scoring
+   */
+  setEventCallbacks(
+    onRingCollect?: () => void,
+    onEnemyDefeat?: () => void
+  ): void {
+    this.onRingCollectCallback = onRingCollect;
+    this.onEnemyDefeatCallback = onEnemyDefeat;
   }
 
   private setupInput(scene: Phaser.Scene) {
@@ -568,6 +583,21 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    */
   public collectRing(): void {
     this.ringCount++;
+
+    // Trigger callback for scoring
+    if (this.onRingCollectCallback) {
+      this.onRingCollectCallback();
+    }
+  }
+
+  /**
+   * Notify enemy defeat (called by enemy)
+   */
+  public notifyEnemyDefeat(): void {
+    // Trigger callback for scoring
+    if (this.onEnemyDefeatCallback) {
+      this.onEnemyDefeatCallback();
+    }
   }
 
   /**
