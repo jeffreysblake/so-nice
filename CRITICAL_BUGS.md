@@ -6,42 +6,34 @@
 
 ---
 
-## 🔴 Bug #1: Enemy Speed 16x Too Fast
+## ✅ Bug #1: Enemy Speed 16x Too Fast (FIXED)
 
+**Status:** FIXED ✅
 **Severity:** Critical
 **Impact:** Enemies impossible to avoid, gameplay broken
 
 ### Root Cause
-Enemies are multiplying `speed * delta`, but `delta` is in milliseconds (16-17ms) rather than normalized frames.
+Enemies were multiplying `speed * delta`, but `delta` is in milliseconds (16-17ms) rather than normalized frames.
 
-**Location:**
-- `src/objects/Motobug.ts:35` - `this.x += this.direction * this.speed * delta;`
-- `src/objects/Crabmeat.ts:77` - `this.x += this.direction * this.speed * delta;`
+**Locations Fixed:**
+- `src/objects/Motobug.ts:58` - ✅ Normalized delta
+- `src/objects/Crabmeat.ts:84` - ✅ Normalized delta
 
-### Expected Behavior
-- Motobug speed: 1.0 px/frame = 60px/second
-- Crabmeat speed: 0.8 px/frame = 48px/second
-
-### Actual Behavior
-- Motobug speed: 16 px/frame = 960px/second (16x too fast!)
-- Crabmeat speed: 12.8 px/frame = 768px/second (16x too fast!)
-
-### Fix Required
+### Fix Applied
 ```typescript
-// WRONG (current):
-this.x += this.direction * this.speed * delta;
+// Normalize delta from milliseconds to frames (60 FPS standard)
+const deltaNormalized = delta / (1000 / 60);
 
-// CORRECT:
-// Option 1: Normalize delta to frames
-const deltaNormalized = delta / (1000 / 60); // Convert ms to frames
+this.walkTimer += deltaNormalized;
 this.x += this.direction * this.speed * deltaNormalized;
-
-// Option 2: Don't multiply by delta (if speed is per frame)
-this.x += this.direction * this.speed;
 ```
 
+### Expected Behavior (Now Correct)
+- Motobug speed: 1.0 px/frame = 60px/second ✅
+- Crabmeat speed: 0.8 px/frame = 48px/second ✅
+
 ### Testing
-Run Playwright visual test `26-enemy-speed-*.png` to measure enemy position delta between frames.
+Requires visual verification - Playwright visual tests cannot run in this headless environment (see LEARNINGS.md #0)
 
 ---
 
@@ -93,42 +85,51 @@ Run Playwright test `25-continuous-jump-bug-*.png` to verify player Y position c
 
 ---
 
-## 🟡 Bug #3: Sprite Not Loading
+## 🟡 Bug #3: Sprite Not Loading (USER ACTION REQUIRED)
 
+**Status:** Identified - User must run setup script ⚠️
 **Severity:** Medium
 **Impact:** Visual only, game playable but looks wrong
 
 ### Reported Behavior
-- Sonic sprite shows as a box instead of character
-- Likely falling back to placeholder
+- Sonic sprite shows as a box (blue circle placeholder)
+- User sees box instead of Sonic character
 
-### Root Cause
-One of:
-1. Sprites not downloaded locally (user's environment)
-2. Sprite path incorrect in build
-3. Animation frames not extracted correctly
+### Root Cause CONFIRMED ✅
+**Assets directory does not exist** - `assets/sprites/sonic/` not found
 
-### Verification
+The PreloadScene creates a placeholder when sprites fail to load (PreloadScene.ts:91-98):
+```typescript
+private createPlaceholderSonic() {
+  const graphics = this.add.graphics();
+  graphics.fillStyle(0x0066ff, 1);
+  graphics.fillCircle(16, 16, 16);
+  graphics.generateTexture('sonic-placeholder', 32, 32);
+  graphics.destroy();
+}
+```
+
+### User Action Required ⚠️
+Run the sprite setup script:
+```bash
+npm run setup-sprites
+```
+
+This will download or prompt to download the Sonic sprites from Spriters Resource.
+
+### Verification After Setup
 Check console for:
 ```
 Sprite loading status:
-  Sonic: ✗  (or ✓)
+  Sonic: ✓
+  Tileset: ✓
+  HUD: ✓
 ```
 
-If ✗, sprites not loaded from `public/assets/sprites/sonic/sonic-spritesheet.png`
-
-### Fix Required
-If sprites exist but not loading:
-1. Check file path in `PreloadScene.ts:53`
-2. Verify assets are copied to dist on build
-3. Check browser console for 404 errors
-
-If sprites don't exist:
-1. User needs to run `npm run setup-sprites`
-2. Or download manually from resources
-
-### Testing
-Run Playwright test `02-player-sprite.png` to verify visual state.
+### Technical Notes
+- Sprites are loaded from `assets/sprites/sonic/sonic-spritesheet.png` (PreloadScene.ts:53)
+- Fallback placeholder ensures game is playable even without sprites
+- Assets not checked into git (too large, copyright concerns)
 
 ---
 

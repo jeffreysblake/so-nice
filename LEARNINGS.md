@@ -38,13 +38,18 @@ Call log:
 4. **Manual testing** with local browser
 5. **Alternative:** Switch to WebGL renderer instead of Canvas (may have other issues)
 
+**Browser Compatibility Test Results:**
+- ❌ **Chromium**: Canvas crashes on screenshot ("Target crashed")
+- ❌ **Firefox**: Permission issues ("Running as root not supported")
+- ❌ **Webkit**: Missing 29 system dependencies (libgtk-4, libGLESv2, etc.)
+
 **Current Status:**
 - ✅ Game loads and runs successfully
 - ✅ No JavaScript errors in console
-- ❌ Cannot capture screenshots in headless environment
-- ❌ Visual testing blocked until environment issue resolved
+- ❌ Cannot capture screenshots in ANY headless browser
+- ❌ Visual testing blocked due to environment limitations
 
-**Recommendation:** User should test locally or provide environment with GPU/display support for visual testing.
+**Recommendation:** User should test locally or provide environment with display/GPU support. Proceed with code-based bug fixes without visual verification.
 
 ---
 
