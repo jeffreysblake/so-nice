@@ -31,60 +31,62 @@ export interface AnimationConfig {
  */
 
 export const SONIC_ANIMATIONS: Record<string, AnimationConfig> = {
-  // Idle/Standing animation
+  // Idle/Standing animation - from "Campaign" section, "Idle" column
+  // Each sprite is in a 78x78 box, we extract the full box
   idle: {
     name: 'sonic-idle',
     frames: [
-      // Standing still, waiting animation frames
-      // These are typically in the top-left of the spritesheet
-      { x: 8, y: 8, width: 29, height: 39 },
-      { x: 45, y: 8, width: 29, height: 39 },
-      { x: 82, y: 8, width: 29, height: 39 },
-      { x: 119, y: 8, width: 29, height: 39 },
+      // Standing still frames from Campaign section, Idle column (vertical stack)
+      { x: 24, y: 243, width: 78, height: 78 },
+      { x: 24, y: 321, width: 78, height: 78 },
+      { x: 24, y: 399, width: 78, height: 78 },
     ],
     frameRate: 8,
     repeat: -1, // Loop
   },
 
-  // Walking animation
+  // Walking animation - from "Basic Motion" section
+  // Sprites are in 78x78 boxes arranged horizontally
   walk: {
     name: 'sonic-walk',
     frames: [
-      // Walking cycle frames
-      { x: 8, y: 60, width: 32, height: 40 },
-      { x: 48, y: 60, width: 32, height: 40 },
-      { x: 88, y: 60, width: 32, height: 40 },
-      { x: 128, y: 60, width: 32, height: 40 },
-      { x: 168, y: 60, width: 32, height: 40 },
-      { x: 208, y: 60, width: 32, height: 40 },
+      // Walking cycle frames from Basic Motion section (horizontal row)
+      { x: 24, y: 346, width: 78, height: 78 },
+      { x: 102, y: 346, width: 78, height: 78 },
+      { x: 180, y: 346, width: 78, height: 78 },
+      { x: 258, y: 346, width: 78, height: 78 },
+      { x: 336, y: 346, width: 78, height: 78 },
+      { x: 414, y: 346, width: 78, height: 78 },
     ],
     frameRate: 12,
     repeat: -1,
   },
 
-  // Running animation
+  // Running animation - from "Full Speed" section
+  // Sprites are in 78x78 boxes arranged horizontally
   run: {
     name: 'sonic-run',
     frames: [
-      // Running cycle - faster leg movement
-      { x: 8, y: 112, width: 34, height: 40 },
-      { x: 50, y: 112, width: 34, height: 40 },
-      { x: 92, y: 112, width: 34, height: 40 },
-      { x: 134, y: 112, width: 34, height: 40 },
+      // Running cycle from Full Speed section (horizontal row)
+      { x: 24, y: 507, width: 78, height: 78 },
+      { x: 102, y: 507, width: 78, height: 78 },
+      { x: 180, y: 507, width: 78, height: 78 },
+      { x: 258, y: 507, width: 78, height: 78 },
     ],
     frameRate: 16,
     repeat: -1,
   },
 
-  // Jumping/Rolling (spin ball)
+  // Jumping/Rolling (spin ball) - from "Rolling / Jumping" section
+  // Sprites are in 78x78 boxes arranged horizontally
   jump: {
     name: 'sonic-jump',
     frames: [
-      // Spin ball animation - used for jumping and rolling
-      { x: 8, y: 164, width: 30, height: 30 },
-      { x: 46, y: 164, width: 30, height: 30 },
-      { x: 84, y: 164, width: 30, height: 30 },
-      { x: 122, y: 164, width: 30, height: 30 },
+      // Spin ball animation from Rolling / Jumping section (horizontal row)
+      { x: 24, y: 624, width: 78, height: 78 },
+      { x: 102, y: 624, width: 78, height: 78 },
+      { x: 180, y: 624, width: 78, height: 78 },
+      { x: 258, y: 624, width: 78, height: 78 },
     ],
     frameRate: 20,
     repeat: -1,
@@ -94,12 +96,25 @@ export const SONIC_ANIMATIONS: Record<string, AnimationConfig> = {
   roll: {
     name: 'sonic-roll',
     frames: [
-      { x: 8, y: 164, width: 30, height: 30 },
-      { x: 46, y: 164, width: 30, height: 30 },
-      { x: 84, y: 164, width: 30, height: 30 },
-      { x: 122, y: 164, width: 30, height: 30 },
+      { x: 24, y: 624, width: 78, height: 78 },
+      { x: 102, y: 624, width: 78, height: 78 },
+      { x: 180, y: 624, width: 78, height: 78 },
+      { x: 258, y: 624, width: 78, height: 78 },
     ],
     frameRate: 20,
+    repeat: -1,
+  },
+
+  // Spin dash - uses roll frames but with faster animation to show charging
+  spindash: {
+    name: 'sonic-spindash',
+    frames: [
+      { x: 24, y: 624, width: 78, height: 78 },
+      { x: 102, y: 624, width: 78, height: 78 },
+      { x: 180, y: 624, width: 78, height: 78 },
+      { x: 258, y: 624, width: 78, height: 78 },
+    ],
+    frameRate: 30, // Faster than roll to show charging effect
     repeat: -1,
   },
 };
@@ -185,8 +200,14 @@ export function getSonicAnimationForState(
   isGrounded: boolean,
   isRolling: boolean,
   isJumping: boolean,
-  groundSpeed: number
+  groundSpeed: number,
+  isSpindashing: boolean = false
 ): string {
+  // Spin dashing takes priority over other states
+  if (isSpindashing) {
+    return 'sonic-spindash';
+  }
+
   // Jumping/in air
   if (!isGrounded || isJumping) {
     return 'sonic-jump';

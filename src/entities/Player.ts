@@ -211,7 +211,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.physicsState.isGrounded,
       this.physicsState.isRolling,
       this.physicsState.isJumping,
-      this.physicsState.groundSpeed
+      this.physicsState.groundSpeed,
+      this.physicsState.isSpindashing
     );
 
     // Only change animation if it's different from current
@@ -431,10 +432,66 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         Math.sign(this.physicsState.groundSpeed) * TOP_SPEED;
     }
 
-    // Check for roll
+    // Spin dash mechanics
+    const isStopped = Math.abs(this.physicsState.groundSpeed) < 0.5;
+    const downHeld = this.rollKey?.isDown ?? false;
+
+    // Enter spin dash state when DOWN is held while stopped
+    if (downHeld && isStopped && !this.physicsState.isSpindashing) {
+      this.physicsState.isSpindashing = true;
+      this.physicsState.spindashCharge = 0;
+    }
+
+    // Spin dash charging and decay
+    if (this.physicsState.isSpindashing) {
+      // Charge on jump button press
+      const jumpJustPressed = Phaser.Input.Keyboard.JustDown(this.jumpKey);
+      if (jumpJustPressed) {
+        this.physicsState.spindashCharge = Math.min(
+          this.physicsState.spindashCharge + PhysicsConstants.SPINDASH_CHARGE,
+          PhysicsConstants.SPINDASH_MAX_CHARGE
+        );
+      }
+
+      // Apply decay each frame (but not on the same frame as charging)
+      if (this.physicsState.spindashCharge > 0 && !jumpJustPressed) {
+        this.physicsState.spindashCharge -=
+          (this.physicsState.spindashCharge / 0.125) / 256 * delta;
+
+        // Clamp to zero to prevent negative charge
+        if (this.physicsState.spindashCharge < 0) {
+          this.physicsState.spindashCharge = 0;
+        }
+      }
+
+      // Release spin dash when DOWN is released
+      if (!downHeld && this.physicsState.spindashCharge > 0) {
+        // Convert charge to ground speed
+        const releaseSpeed =
+          PhysicsConstants.SPINDASH_RELEASE_SPEED +
+          Math.floor(this.physicsState.spindashCharge) / 2;
+
+        // Apply in facing direction
+        this.physicsState.groundSpeed =
+          this.physicsState.isFacingRight ? releaseSpeed : -releaseSpeed;
+
+        // Start rolling
+        this.physicsState.isRolling = true;
+        this.physicsState.isSpindashing = false;
+        this.physicsState.spindashCharge = 0;
+      }
+
+      // Cancel spin dash if DOWN released with no charge
+      if (!downHeld && this.physicsState.spindashCharge === 0) {
+        this.physicsState.isSpindashing = false;
+      }
+    }
+
+    // Check for roll (normal roll, not from spin dash)
     if (
       this.rollKey?.isDown &&
       !this.physicsState.isRolling &&
+      !this.physicsState.isSpindashing &&
       Math.abs(this.physicsState.groundSpeed) > PhysicsConstants.ROLL_MIN_SPEED
     ) {
       this.physicsState.isRolling = true;

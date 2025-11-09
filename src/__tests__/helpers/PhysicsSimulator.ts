@@ -21,6 +21,7 @@ export class PhysicsSimulator {
   private heightRadius = 20;
   private hasLoggedLanding = false; // For diagnostic logging
   private wasGroundedLastFrame = false; // Track grounded state across frames
+  private wasJumpPressedLastFrame = false; // Track jump button state for JustDown detection
 
   constructor(x: number = 0, y: number = 0) {
     this.state = {
@@ -96,6 +97,9 @@ export class PhysicsSimulator {
 
     // Track grounded state for next frame
     this.wasGroundedLastFrame = this.state.isGrounded;
+
+    // Track jump button state for next frame (for JustDown detection)
+    this.wasJumpPressedLastFrame = input.jump;
   }
 
   /**
@@ -210,8 +214,62 @@ export class PhysicsSimulator {
       this.state.groundSpeed = Math.sign(this.state.groundSpeed) * TOP_SPEED;
     }
 
-    // Rolling
-    if (input.down && !this.state.isRolling && Math.abs(this.state.groundSpeed) > ROLL_MIN_SPEED) {
+    // Spin dash mechanics
+    const isStopped = Math.abs(this.state.groundSpeed) < 0.5;
+
+    // Enter spin dash state when DOWN is held while stopped
+    if (input.down && isStopped && !this.state.isSpindashing) {
+      this.state.isSpindashing = true;
+      this.state.spindashCharge = 0;
+    }
+
+    // Spin dash charging and decay
+    if (this.state.isSpindashing) {
+      // Charge on jump button press (JustDown simulation)
+      const jumpJustPressed = input.jump && !this.wasJumpPressedLastFrame;
+      if (jumpJustPressed) {
+        this.state.spindashCharge = Math.min(
+          this.state.spindashCharge + PhysicsConstants.SPINDASH_CHARGE,
+          PhysicsConstants.SPINDASH_MAX_CHARGE
+        );
+      }
+
+      // Apply decay each frame (but not on the same frame as charging)
+      if (this.state.spindashCharge > 0 && !jumpJustPressed) {
+        this.state.spindashCharge -=
+          (this.state.spindashCharge / 0.125) / 256 * delta;
+
+        // Clamp to zero to prevent negative charge
+        if (this.state.spindashCharge < 0) {
+          this.state.spindashCharge = 0;
+        }
+      }
+
+      // Release spin dash when DOWN is released
+      if (!input.down && this.state.spindashCharge > 0) {
+        // Convert charge to ground speed
+        const releaseSpeed =
+          PhysicsConstants.SPINDASH_RELEASE_SPEED +
+          Math.floor(this.state.spindashCharge) / 2;
+
+        // Apply in facing direction
+        this.state.groundSpeed =
+          this.state.isFacingRight ? releaseSpeed : -releaseSpeed;
+
+        // Start rolling
+        this.state.isRolling = true;
+        this.state.isSpindashing = false;
+        this.state.spindashCharge = 0;
+      }
+
+      // Cancel spin dash if DOWN released with no charge
+      if (!input.down && this.state.spindashCharge === 0) {
+        this.state.isSpindashing = false;
+      }
+    }
+
+    // Rolling (normal roll, not from spin dash)
+    if (input.down && !this.state.isRolling && !this.state.isSpindashing && Math.abs(this.state.groundSpeed) > ROLL_MIN_SPEED) {
       this.state.isRolling = true;
     }
 

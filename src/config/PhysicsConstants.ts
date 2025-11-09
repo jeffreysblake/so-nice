@@ -62,9 +62,11 @@ export class PhysicsConstants {
   static readonly FPS = 60;
   static readonly FIXED_TIMESTEP = 1000 / 60;   // ~16.67ms per frame
 
-  // Spindash
-  static readonly SPINDASH_CHARGE = 2;          // Charge rate per button press
-  static readonly SPINDASH_RELEASE = 8;         // Base release speed
+  // Spindash (from SPG:Special_Abilities)
+  static readonly SPINDASH_CHARGE = 2;          // Charge added per button press
+  static readonly SPINDASH_MAX_CHARGE = 8;      // Maximum charge value
+  static readonly SPINDASH_RELEASE_SPEED = 8;   // Base release speed (8 + floor(charge)/2)
+  static readonly SPINDASH_MAX_SPEED = 12;      // Maximum speed at full charge (8 + 8/2 = 12)
 
   // Terminal Velocities
   static readonly MAX_X_VELOCITY = 16;
