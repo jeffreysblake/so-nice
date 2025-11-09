@@ -175,6 +175,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Move the player
     this.movePlayer(deltaNormalized);
 
+    // Apply gravity AFTER position update (critical timing per Sonic Physics Guide)
+    if (!this.physicsState.isGrounded) {
+      this.applyGravity(deltaNormalized);
+    }
+
     // Update position in physics state
     this.physicsState.x = this.x;
     this.physicsState.y = this.y;
@@ -338,7 +343,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private detachFromSurface(): void {
     const angleRad = (this.physicsState.groundAngle * Math.PI) / 180;
     this.physicsState.xVelocity = this.physicsState.groundSpeed * Math.cos(angleRad);
-    this.physicsState.yVelocity = this.physicsState.groundSpeed * Math.sin(angleRad);
+    this.physicsState.yVelocity = this.physicsState.groundSpeed * -Math.sin(angleRad);
     this.physicsState.isGrounded = false;
     this.physicsState.groundMode = GroundMode.FLOOR; // Reset to floor mode when in air
   }
@@ -352,12 +357,22 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Only apply slope physics if on a slope
     if (angle !== 0 && angle !== 180) {
       const angleRad = (angle * Math.PI) / 180;
-      const slopeFactor = this.physicsState.isRolling
-        ? PhysicsConstants.SLOPE_FACTOR_ROLLDOWN
-        : PhysicsConstants.SLOPE_FACTOR_NORMAL;
+      const sinAngle = Math.sin(angleRad);
+
+      // Determine slope factor based on roll state and direction
+      let slopeFactor: number;
+      if (this.physicsState.isRolling) {
+        // Rolling: different factors for uphill vs downhill
+        slopeFactor = sinAngle < 0
+          ? PhysicsConstants.SLOPE_FACTOR_ROLLDOWN  // Downhill (sin < 0)
+          : PhysicsConstants.SLOPE_FACTOR_ROLLUP;   // Uphill (sin > 0)
+      } else {
+        // Normal running
+        slopeFactor = PhysicsConstants.SLOPE_FACTOR_NORMAL;
+      }
 
       // Apply slope factor: downhill adds speed, uphill removes speed
-      this.physicsState.groundSpeed -= slopeFactor * Math.sin(angleRad) * delta;
+      this.physicsState.groundSpeed -= slopeFactor * sinAngle * delta;
     }
   }
 
@@ -369,7 +384,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       // Move along ground based on angle
       const angleRad = (this.physicsState.groundAngle * Math.PI) / 180;
       this.physicsState.xVelocity = this.physicsState.groundSpeed * Math.cos(angleRad);
-      this.physicsState.yVelocity = this.physicsState.groundSpeed * Math.sin(angleRad);
+      this.physicsState.yVelocity = this.physicsState.groundSpeed * -Math.sin(angleRad);
     }
 
     // Apply movement
@@ -410,8 +425,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       }
     }
 
-    // Apply friction when no input - use different values for rolling vs running
-    if (!cursors.left?.isDown && !cursors.right?.isDown) {
+    // Apply friction when no input AND not in control lock
+    // Per Sonic Physics Guide: "If you press Left or Right during a control lock,
+    // no friction will be applied" - and friction shouldn't apply during control lock at all
+    // to maintain momentum during springs/forced movement
+    if (!cursors.left?.isDown && !cursors.right?.isDown && !controlsLocked) {
       const frictionValue = this.physicsState.isRolling ? ROLL_FRICTION : FRICTION;
       if (this.physicsState.groundSpeed > 0) {
         this.physicsState.groundSpeed -= Math.min(
@@ -507,28 +525,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Air movement with reduced control
+   * Air movement with reduced control (no gravity - that's applied after position update)
    */
   private updateAirMovement(
     cursors: Phaser.Types.Input.Keyboard.CursorKeys,
     delta: number
   ) {
-    const { AIR_ACCELERATION, GRAVITY, JUMP_RELEASE, MAX_Y_VELOCITY } =
-      PhysicsConstants;
+    const { AIR_ACCELERATION, JUMP_RELEASE } = PhysicsConstants;
 
     // Air control (reduced compared to ground)
     if (cursors.left?.isDown) {
       this.physicsState.xVelocity -= AIR_ACCELERATION * delta;
     } else if (cursors.right?.isDown) {
       this.physicsState.xVelocity += AIR_ACCELERATION * delta;
-    }
-
-    // Apply gravity
-    this.physicsState.yVelocity += GRAVITY * delta;
-
-    // Cap fall speed
-    if (this.physicsState.yVelocity > MAX_Y_VELOCITY) {
-      this.physicsState.yVelocity = MAX_Y_VELOCITY;
     }
 
     // Variable jump height - release jump early for shorter jump
@@ -543,6 +552,22 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (Math.abs(this.physicsState.xVelocity) > maxAirSpeed) {
       this.physicsState.xVelocity =
         Math.sign(this.physicsState.xVelocity) * maxAirSpeed;
+    }
+  }
+
+  /**
+   * Apply gravity (called AFTER position update per Sonic Physics Guide)
+   * "Gravity timing is significant: This happens after the Player's position was updated."
+   */
+  private applyGravity(delta: number): void {
+    const { GRAVITY, MAX_Y_VELOCITY } = PhysicsConstants;
+
+    // Apply gravity
+    this.physicsState.yVelocity += GRAVITY * delta;
+
+    // Cap fall speed
+    if (this.physicsState.yVelocity > MAX_Y_VELOCITY) {
+      this.physicsState.yVelocity = MAX_Y_VELOCITY;
     }
   }
 
