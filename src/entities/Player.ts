@@ -241,22 +241,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const wasGrounded = this.physicsState.isGrounded;
 
     if (groundResult.collided) {
-      // We hit ground
-      if (!wasGrounded || this.isFallingTowardsSurface()) {
-        // Landing or already on ground
+      // Landing from air
+      if (!wasGrounded) {
         this.physicsState.isGrounded = true;
         this.physicsState.groundAngle = groundResult.angle;
-
-        // Update gravity mode based on new angle
         this.physicsState.groundMode = GravityUtils.getGravityModeFromAngle(groundResult.angle);
 
-        // Snap to surface (distance depends on mode)
+        // Snap to surface when landing
         this.adjustPositionToSurface(groundResult.distance, this.physicsState.groundMode);
 
-        // Landing: convert velocity to ground speed
-        if (!wasGrounded) {
-          this.convertVelocityToGroundSpeed(groundResult.angle);
-        }
+        // Convert air velocity to ground speed
+        this.convertVelocityToGroundSpeed(groundResult.angle);
 
         this.physicsState.yVelocity = 0;
         this.physicsState.isJumping = false;
@@ -328,8 +323,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const surfaceY = Math.sin(angleRad);
 
     // Dot product gives speed along surface
+    // Note: yVelocity is negated because movePlayer uses -sin() for screen coords
     const speedAlongSurface =
-      this.physicsState.xVelocity * surfaceX +
+      this.physicsState.xVelocity * surfaceX -
       this.physicsState.yVelocity * surfaceY;
 
     this.physicsState.groundSpeed = speedAlongSurface;
@@ -387,7 +383,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     cursors: Phaser.Types.Input.Keyboard.CursorKeys,
     delta: number
   ) {
-    const { ACCELERATION, DECELERATION, FRICTION, TOP_SPEED } =
+    const { ACCELERATION, DECELERATION, FRICTION, ROLL_FRICTION, TOP_SPEED } =
       PhysicsConstants;
 
     const controlsLocked = this.physicsState.controlLock > 0;
@@ -413,17 +409,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       }
     }
 
-    // Apply friction when no input
+    // Apply friction when no input - use different values for rolling vs running
     if (!cursors.left?.isDown && !cursors.right?.isDown) {
+      const frictionValue = this.physicsState.isRolling ? ROLL_FRICTION : FRICTION;
       if (this.physicsState.groundSpeed > 0) {
         this.physicsState.groundSpeed -= Math.min(
           this.physicsState.groundSpeed,
-          FRICTION * delta
+          frictionValue * delta
         );
       } else if (this.physicsState.groundSpeed < 0) {
         this.physicsState.groundSpeed += Math.min(
           Math.abs(this.physicsState.groundSpeed),
-          FRICTION * delta
+          frictionValue * delta
         );
       }
     }

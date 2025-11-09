@@ -14,7 +14,9 @@ describe('Complete Game Scenarios', () => {
 
   beforeEach(() => {
     collisionManager = new CollisionManager({} as any);
-    simulator = new PhysicsSimulator(80, 640); // Start at grid (5, 40)
+    // Spawn Sonic ABOVE ground (like real game does)
+    // y=620 puts sensor at y=640, which is 16px above tile surface at y=656
+    simulator = new PhysicsSimulator(80, 620);
     simulator.setCollisionManager(collisionManager);
   });
 
@@ -30,13 +32,25 @@ describe('Complete Game Scenarios', () => {
     it('should accelerate to top speed and maintain it', () => {
       const speeds: number[] = [];
 
-      for (let i = 0; i < 200; i++) {
+      // Debug first 25 frames
+      for (let i = 0; i < 25; i++) {
+        simulator.update({ left: false, right: true, jump: false, down: false }, 1);
+        const state = simulator.getState();
+        speeds.push(Math.abs(state.groundSpeed));
+        if (i < 25) {
+          console.log(`Frame ${i+1}: grounded=${state.isGrounded}, speed=${state.groundSpeed.toFixed(6)}, y=${state.y.toFixed(2)}, xVel=${state.xVelocity.toFixed(3)}, yVel=${state.yVelocity.toFixed(3)}`);
+        }
+      }
+
+      // Continue to 200 frames
+      for (let i = 25; i < 200; i++) {
         simulator.update({ left: false, right: true, jump: false, down: false }, 1);
         speeds.push(Math.abs(simulator.getState().groundSpeed));
       }
 
       // Should reach top speed
       const maxSpeed = Math.max(...speeds);
+      console.log(`Max speed reached: ${maxSpeed}, expected: ${PhysicsConstants.TOP_SPEED}`);
       expect(maxSpeed).toBeCloseTo(PhysicsConstants.TOP_SPEED, 1);
 
       // Last 50 frames should be at top speed
@@ -116,13 +130,17 @@ describe('Complete Game Scenarios', () => {
 
   describe('Scenario: Rolling Down a Hill', () => {
     beforeEach(() => {
-      // Create downhill slope
+      // Create downhill slope - diagonal placement forms continuous slope
+      // Each SLOPE_45_DOWN tile goes from height 16 (left) to 1 (right)
+      // Placing at (x, 37+x) creates seamless downhill progression
       for (let x = 0; x < 4; x++) {
         const tile = TerrainTiles.createTile(TerrainTiles.SLOPE_45_DOWN);
         collisionManager.setTile(x, 37 + x, tile);
       }
 
-      simulator = new PhysicsSimulator(16, 592);
+      // Start player on the slope surface: tile (0,37) at X=8 has height 8
+      // Tile top-left at Y=592, surface at Y=600, player center at Y=580 (heightRadius=20)
+      simulator = new PhysicsSimulator(8, 580);
       simulator.setCollisionManager(collisionManager);
       simulator.setState({
         groundSpeed: 1,
@@ -138,6 +156,7 @@ describe('Complete Game Scenarios', () => {
       simulator.simulateFrames(50, { left: false, right: false, jump: false, down: false });
 
       const finalSpeed = simulator.getState().groundSpeed;
+      console.log(`Initial speed: ${initialSpeed.toFixed(4)}, Final speed: ${finalSpeed.toFixed(4)}`);
 
       expect(finalSpeed).toBeGreaterThan(initialSpeed);
       expect(finalSpeed).toBeGreaterThan(3);
