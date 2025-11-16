@@ -43,50 +43,55 @@ describe('Slope Physics', () => {
     });
 
     it('should speed up when running downhill', () => {
+      // Create a fresh simulator without collision manager for pure physics testing
+      const physicsSimulator = new PhysicsSimulator(0, 0);
+
       // Create downward slope (315° = downhill right)
-      simulator.setState({
+      physicsSimulator.setState({
         isGrounded: true,
         groundSpeed: 1,
         groundAngle: 315,
       });
 
-      const initialSpeed = simulator.getState().groundSpeed;
+      const initialSpeed = physicsSimulator.getState().groundSpeed;
 
       // Let gravity do its work (no input)
-      simulator.simulateFrames(20, { left: false, right: false, jump: false, down: false });
+      physicsSimulator.simulateFrames(20, { left: false, right: false, jump: false, down: false });
 
-      const finalSpeed = simulator.getState().groundSpeed;
+      const finalSpeed = physicsSimulator.getState().groundSpeed;
 
       // Should have gained speed going downhill
       expect(finalSpeed).toBeGreaterThan(initialSpeed);
     });
 
     it('should apply stronger slope factor when rolling', () => {
-      simulator.setState({
+      const physicsSimulator = new PhysicsSimulator(0, 0);
+
+      physicsSimulator.setState({
         isGrounded: true,
         groundSpeed: 2,
         groundAngle: 315, // Downhill
         isRolling: true,
       });
 
-      const initialSpeed = simulator.getState().groundSpeed;
+      const initialSpeed = physicsSimulator.getState().groundSpeed;
 
-      simulator.simulateFrames(10, { left: false, right: false, jump: false, down: false });
+      physicsSimulator.simulateFrames(10, { left: false, right: false, jump: false, down: false });
 
-      const rollingSpeed = simulator.getState().groundSpeed;
+      const rollingSpeed = physicsSimulator.getState().groundSpeed;
       const rollingGain = rollingSpeed - initialSpeed;
 
       // Reset and test without rolling
-      simulator.setState({
+      physicsSimulator.setState({
         isGrounded: true,
         groundSpeed: 2,
         groundAngle: 315,
         isRolling: false,
       });
 
-      simulator.simulateFrames(10, { left: false, right: false, jump: false, down: false });
+      physicsSimulator.simulateFrames(10, { left: false, right: false, jump: false, down: false });
 
-      const normalSpeed = simulator.getState().groundSpeed;
+      const normalSpeed = physicsSimulator.getState().groundSpeed;
       const normalGain = normalSpeed - initialSpeed;
 
       // Rolling should gain more speed
@@ -94,18 +99,20 @@ describe('Slope Physics', () => {
     });
 
     it('should not apply slope factor on flat ground', () => {
-      simulator.setState({
+      const physicsSimulator = new PhysicsSimulator(0, 0);
+
+      physicsSimulator.setState({
         isGrounded: true,
         groundSpeed: 2,
         groundAngle: 0,
       });
 
-      const initialSpeed = simulator.getState().groundSpeed;
+      const initialSpeed = physicsSimulator.getState().groundSpeed;
 
       // No input, only friction should apply
-      simulator.update({ left: false, right: false, jump: false, down: false }, 1);
+      physicsSimulator.update({ left: false, right: false, jump: false, down: false }, 1);
 
-      const newSpeed = simulator.getState().groundSpeed;
+      const newSpeed = physicsSimulator.getState().groundSpeed;
       const speedLoss = initialSpeed - newSpeed;
 
       // Should only lose friction amount
@@ -115,7 +122,10 @@ describe('Slope Physics', () => {
 
   describe('Angle-Based Movement', () => {
     it('should move along slope angle when grounded', () => {
-      simulator.setState({
+      // Create a fresh simulator without collision manager for pure physics testing
+      const physicsSimulator = new PhysicsSimulator(0, 0);
+
+      physicsSimulator.setState({
         isGrounded: true,
         groundSpeed: 3,
         groundAngle: 45,
@@ -123,21 +133,27 @@ describe('Slope Physics', () => {
         y: 0,
       });
 
-      simulator.update({ left: false, right: false, jump: false, down: false }, 1);
+      physicsSimulator.update({ left: false, right: false, jump: false, down: false }, 1);
 
-      const state = simulator.getState();
+      const state = physicsSimulator.getState();
 
       // Movement should follow 45° angle
+      // Note: Friction and slope factor are applied, so groundSpeed decreases slightly
+      // friction: 0.046875, slope factor: 0.125 * sin(45°) ≈ 0.088
+      // Total reduction: ~0.135, so groundSpeed ≈ 2.865
       const angleRad = (45 * Math.PI) / 180;
-      const expectedXVel = 3 * Math.cos(angleRad);
-      const expectedYVel = 3 * Math.sin(angleRad);
+      const expectedSpeed = state.groundSpeed; // Use actual groundSpeed after physics
+      const expectedXVel = expectedSpeed * Math.cos(angleRad);
+      const expectedYVel = expectedSpeed * -Math.sin(angleRad); // Negative because Y+ is down
 
       expect(state.xVelocity).toBeCloseTo(expectedXVel, 1);
       expect(state.yVelocity).toBeCloseTo(expectedYVel, 1);
     });
 
     it('should handle steep slopes correctly', () => {
-      simulator.setState({
+      const physicsSimulator = new PhysicsSimulator(0, 0);
+
+      physicsSimulator.setState({
         isGrounded: true,
         groundSpeed: 2,
         groundAngle: 67, // Steep slope
@@ -145,9 +161,9 @@ describe('Slope Physics', () => {
         y: 0,
       });
 
-      simulator.update({ left: false, right: false, jump: false, down: false }, 1);
+      physicsSimulator.update({ left: false, right: false, jump: false, down: false }, 1);
 
-      const state = simulator.getState();
+      const state = physicsSimulator.getState();
 
       // Should still move along the angle
       expect(state.xVelocity).not.toBe(0);
@@ -155,7 +171,9 @@ describe('Slope Physics', () => {
     });
 
     it('should handle downward slopes', () => {
-      simulator.setState({
+      const physicsSimulator = new PhysicsSimulator(0, 0);
+
+      physicsSimulator.setState({
         isGrounded: true,
         groundSpeed: 3,
         groundAngle: 315, // 45° downward
@@ -163,9 +181,9 @@ describe('Slope Physics', () => {
         y: 0,
       });
 
-      simulator.update({ left: false, right: false, jump: false, down: false }, 1);
+      physicsSimulator.update({ left: false, right: false, jump: false, down: false }, 1);
 
-      const state = simulator.getState();
+      const state = physicsSimulator.getState();
 
       // X should be positive (moving right)
       // Y should be positive (moving down)

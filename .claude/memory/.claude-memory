@@ -1,0 +1,135 @@
+# {{PROJECT_NAME}} - Core Memory
+# Critical project constraints - always loaded, never changes
+
+## Code Quality - Immutable Standards
+- **File size guidance**: 400 lines for NEW/MODIFIED files (advisory - excludes tests)
+- **Test approach**: Write code → Write tests → Verify coverage (pragmatic workflow)
+- **Coverage**: Match upstream project standards (not enforced by template)
+- **Type safety**: 100% static type checker compliance (no ignores without justification)
+
+## Testing
+- **Pre-commit**: Affected tests only (target <15s)
+- **CI/CD**: Full test suite
+- **Test structure**: Mirrors implementation (tests/test_{module}/)
+
+---
+
+# Code Hygiene - Anti-Bloat Rules (CRITICAL)
+
+## File Operation Priority (STRICT ORDER)
+
+### 1. ALWAYS: Edit Existing File FIRST
+**Before creating ANY new file, ask**: "Can I add this to an existing file?"
+
+✅ **GOOD Examples**:
+- Add method to existing service file
+- Add test to existing test file
+- Add function to existing module
+
+❌ **BAD Examples**:
+- Create `service_helper.py` (unnecessary new file)
+- Create `utils/service_utils.py` (fragmentation)
+- Create `service_v2.py` (versioning bloat)
+
+**Exceptions - When to CREATE new file**:
+1. Existing file would exceed 400 lines (for new/modified code, not legacy)
+2. Entirely new feature domain (e.g., new `/analytics/` directory)
+3. Shared utility used by 3+ unrelated modules
+4. Clear separation of concerns (models vs services vs endpoints)
+5. Monorepo: New workspace package (follow project conventions)
+
+### 2. ALWAYS: Inline Temporary Tests
+**For quick validation, DO NOT create test files**
+
+✅ **GOOD Examples**:
+```bash
+# Inline validation - no file creation (examples vary by language)
+python -c "from app.service import get_data; assert get_data(1).name == 'test'"
+node -e "const {getData} = require('./app/service'); console.log(getData(1));"
+
+# Run specific test
+pytest tests/test_service.py::test_specific_function -v
+npm test -- --grep "specific test name"
+
+# Quick import test
+python -c "import app.service; print('Import successful')"
+node -e "require('./app/service'); console.log('Import successful');"
+```
+
+❌ **BAD Examples**:
+- Create `tests/test_temp_validation.py`
+- Create `scripts/quick_test.py`
+- Create `temp_check.js` in project root
+
+### 3. ALWAYS: Clean Up After Yourself
+**Before committing, remove temporary code**
+
+✅ **Cleanup Checklist**:
+- [ ] Remove debug `print()` / `console.log()` statements
+- [ ] Remove commented-out code blocks
+- [ ] Remove temporary variables (e.g., `temp_`, `debug_`)
+- [ ] Remove unused imports
+- [ ] Consolidate duplicate helper functions
+
+❌ **Never Commit**:
+- `print("DEBUG:")` / `console.log("DEBUG:")` statements
+- `# TODO: remove this later`
+- Commented-out code blocks
+- Temporary test scripts
+
+### 4. ALWAYS: Consolidate Duplicates
+**If you see similar patterns 2+ times, merge them**
+
+✅ **GOOD Examples**:
+- Merge similar validation functions into one parameterized function
+- Extract common patterns to shared utility
+- Consolidate duplicate test fixtures
+
+❌ **BAD Examples**:
+- `validate_user_email()` and `validate_admin_email()` (should be one function)
+- `format_date_v1()` and `format_date_v2()` (should be one with parameter)
+- Three similar test fixtures (should be one parameterized fixture)
+
+---
+
+## Pre-Commit Detection
+**Every time you're about to use Write tool, trigger this check**:
+
+```
+BEFORE WRITE CHECK:
+1. Does a related file already exist? → Use Edit instead
+2. Is this just for temporary validation? → Use inline test
+3. Will this add to project bloat? → Reconsider approach
+4. Can this be consolidated with existing code? → Merge instead
+```
+
+---
+
+## Learning Integration
+**When user corrects Claude on ANYTHING**:
+- Immediately append to `.claude/memory/learnings/user-corrections.md`
+- Track frequency counter for each correction type
+- **After 3rd occurrence**: Move to `.claude/memory/learnings/common-patterns.md`
+- **After 5th occurrence**: Propose skill creation via /ratchet
+- **Monthly /ratchet**: Consolidate critical patterns into core memory
+- **Applies to**: Code structure, testing, architecture, naming, patterns, tool usage, etc.
+
+---
+
+## Phase-Based Development
+- **Phase size**: Small (<400 lines), Medium (400-800), Large (800-1200)
+- **Commit strategy**: Conventional commits (feat:, fix:, chore:, etc.)
+- **TodoWrite**: Track all multi-step tasks proactively
+
+## Git Workflow
+- **Branch strategy**: Feature branches preferred
+- **Commit message format**: Conventional commits with Claude co-author tag
+- **Pre-commit time target**: <15 seconds (achieved via smart test selection)
+- **NEVER use --no-verify**: Pre-commit hooks enforce quality standards
+
+## Monorepo Awareness
+- **Workspace detection**: Auto-detect npm/yarn/pnpm workspaces
+- **Context loading**: Load only affected package + direct dependencies
+- **Test running**: Run tests only in affected workspace (`npm run test -w <package>`)
+- **Package isolation**: Respect package boundaries and conventions
+- **Dependency tracking**: Map workspace: protocol and inter-package imports

@@ -8,9 +8,10 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    port: 5174,
     open: true,
   },
+  assetsInclude: ['**/*.bin'], // Include .bin files as assets
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

@@ -24,7 +24,8 @@ export class TerrainTile {
     public readonly widthArray: HeightArray,  // For horizontal collision
     public readonly solidity: TileSolidity = TileSolidity.FULL,
     public readonly flipX: boolean = false,
-    public readonly flipY: boolean = false
+    public readonly flipY: boolean = false,
+    public readonly tileId: number = 0  // Sonic 1 collision tile ID (0-255)
   ) {}
 
   /**
@@ -73,6 +74,13 @@ export class TerrainTile {
     }
 
     return angle;
+  }
+
+  /**
+   * Get the Sonic 1 collision tile ID
+   */
+  getTileId(): number {
+    return this.tileId;
   }
 }
 
@@ -152,7 +160,8 @@ export class TerrainTiles {
     heightArray: HeightArray,
     solidity: TileSolidity = TileSolidity.FULL,
     flipX = false,
-    flipY = false
+    flipY = false,
+    tileId = 0
   ): TerrainTile {
     // Create corresponding width array (rotated 90 degrees)
     const widthArray: HeightArray = {
@@ -160,6 +169,6 @@ export class TerrainTiles {
       angle: (heightArray.angle + 90) % 360,
     };
 
-    return new TerrainTile(heightArray, widthArray, solidity, flipX, flipY);
+    return new TerrainTile(heightArray, widthArray, solidity, flipX, flipY, tileId);
   }
 }

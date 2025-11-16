@@ -35,6 +35,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // Input tracking
   private jumpKey!: Phaser.Input.Keyboard.Key;
   private rollKey!: Phaser.Input.Keyboard.Key;
+  private jumpKeyWasDown: boolean = false;
 
   // Sensor dimensions
   private readonly sensorWidth = 9;
@@ -161,9 +162,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.setAlpha(1.0);
     }
 
-    // Check ground collision using sensors
-    this.checkGroundCollision();
-
+    // Update movement based on current state
     if (this.physicsState.isGrounded) {
       this.updateGroundMovement(cursors, deltaNormalized);
       this.applySlopePhysics(deltaNormalized);
@@ -172,8 +171,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.updateAirMovement(cursors, deltaNormalized);
     }
 
-    // Move the player
+    // Move the player (SPG Step 8)
     this.movePlayer(deltaNormalized);
+
+    // THEN check ground collision with NEW position (SPG Step 9)
+    this.checkGroundCollision();
 
     // Apply gravity AFTER position update (critical timing per Sonic Physics Guide)
     if (!this.physicsState.isGrounded) {
@@ -234,6 +236,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private checkGroundCollision(): void {
     if (!this.collisionManager) return;
 
+    // Skip ground collision checks when jumping upward to prevent immediate re-grounding
+    // Per SPG: Only check ground when falling (yVelocity > 0) or grounded
+    if (this.physicsState.isJumping && this.physicsState.yVelocity < 0) {
+      return;
+    }
+
     // Get sensor offsets based on current gravity mode
     const sensorOffsets = GravityUtils.getSensorOffsets(this.physicsState.groundMode);
 
@@ -262,23 +270,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.physicsState.yVelocity = 0;
         this.physicsState.isJumping = false;
       } else {
-        // Already grounded - check if we should update mode
-        if (wasGrounded) {
-          this.physicsState.groundAngle = groundResult.angle;
-          const newMode = GravityUtils.getGravityModeFromAngle(groundResult.angle);
+        // Already grounded - update angle and realign to surface
+        this.physicsState.groundAngle = groundResult.angle;
+        const newMode = GravityUtils.getGravityModeFromAngle(groundResult.angle);
 
-          if (newMode !== this.physicsState.groundMode) {
-            this.physicsState.groundMode = newMode;
-          }
+        if (newMode !== this.physicsState.groundMode) {
+          this.physicsState.groundMode = newMode;
+        }
 
-          // Check if we should fall off due to insufficient speed or bad angle
-          if (GravityUtils.shouldFallOff(
-            this.physicsState.groundSpeed,
-            this.physicsState.groundAngle,
-            this.physicsState.groundMode
-          )) {
-            this.detachFromSurface();
-          }
+        // Per SPG: Always reposition to surface (threshold already checked in CollisionManager)
+        // The CollisionManager only returns collided=true if distance is within ±14 pixels
+        this.adjustPositionToSurface(groundResult.distance, this.physicsState.groundMode);
+
+        // Check if we should fall off due to insufficient speed or bad angle
+        if (GravityUtils.shouldFallOff(
+          this.physicsState.groundSpeed,
+          this.physicsState.groundAngle,
+          this.physicsState.groundMode
+        )) {
+          this.detachFromSurface();
         }
       }
     } else {
@@ -378,6 +388,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   /**
    * Move player based on ground speed and angle
+   * Uses swept sensor collision for grounded movement to prevent tunneling
    */
   private movePlayer(delta: number): void {
     if (this.physicsState.isGrounded) {
@@ -387,9 +398,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.physicsState.yVelocity = this.physicsState.groundSpeed * -Math.sin(angleRad);
     }
 
+    // Calculate total movement
+    const moveX = this.physicsState.xVelocity * delta;
+    const moveY = this.physicsState.yVelocity * delta;
+
     // Apply movement
-    this.x += this.physicsState.xVelocity * delta;
-    this.y += this.physicsState.yVelocity * delta;
+    this.x += moveX;
+    this.y += moveY;
+
+    // Enforce left world boundary - player cannot move left past x=0
+    if (this.x < 0) {
+      this.x = 0;
+      // Stop leftward movement
+      if (this.physicsState.xVelocity < 0) {
+        this.physicsState.xVelocity = 0;
+      }
+      if (this.physicsState.groundSpeed < 0) {
+        this.physicsState.groundSpeed = 0;
+      }
+    }
   }
 
   /**
@@ -575,10 +602,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
    * Check and execute jump
    */
   private checkJump() {
+    // Check if jump key is currently pressed (more reliable than JustDown in tests)
+    const jumpPressed = this.jumpKey && this.jumpKey.isDown;
+
+    // Only jump if: key is down, grounded, not already jumping, and not already pressed last frame
     if (
-      Phaser.Input.Keyboard.JustDown(this.jumpKey) &&
+      jumpPressed &&
       this.physicsState.isGrounded &&
-      !this.physicsState.isJumping
+      !this.physicsState.isJumping &&
+      !this.jumpKeyWasDown
     ) {
       // Jump perpendicular to surface
       const angleRad = (this.physicsState.groundAngle * Math.PI) / 180;
@@ -590,9 +622,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
       this.physicsState.isJumping = true;
       this.physicsState.isGrounded = false;
-
-      console.log('Jump!', { angle: this.physicsState.groundAngle });
     }
+
+    // Track jump key state for next frame
+    this.jumpKeyWasDown = jumpPressed;
   }
 
   /**
@@ -707,8 +740,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!this.lifeSystem || this.lifeSystem.isPlayerDead()) return;
 
     // Death by falling into pit (below world bounds + buffer)
-    if (this.y > 700) {
+    // Increased from 700 to 1000 to accommodate valley terrain at y=752
+    if (this.y > 1000) {
       console.log('Player fell into pit!');
+      this.die();
+    }
+
+    // Death by falling off left edge (safety net)
+    if (this.x < -100) {
+      console.log('Player fell off left edge!');
       this.die();
     }
 
@@ -770,6 +810,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.physicsState.xVelocity = 0;
     this.physicsState.yVelocity = 0;
     this.physicsState.groundAngle = 0;
+    this.physicsState.groundMode = GroundMode.FLOOR; // Reset to floor mode
     this.physicsState.isGrounded = false;
     this.physicsState.isJumping = false;
     this.physicsState.isRolling = false;

@@ -7,6 +7,9 @@ This document compiles physics formulas, constants, and mechanics from the [Soni
 - [Running Physics](#running-physics)
 - [Slope Physics](#slope-physics)
 - [Slope Collision](#slope-collision)
+- [Game Objects](#game-objects)
+- [Hitboxes](#hitboxes)
+- [Loop Construction](#loop-construction)
 - [Implementation Notes](#implementation-notes)
 
 ---
@@ -244,31 +247,62 @@ The engine rotates collision detection based on ground angle:
 
 ### Grounded Collision Resolution
 
-**Sensor Competition:**
-1. Both ground sensors A & B search for solid tiles
-2. Calculate distance to surface for each
-3. **Smaller distance wins** (closest surface)
+**Sensor Competition (CRITICAL):**
+1. Both ground sensors A & B cast downward from their positions
+2. Each sensor returns a distance value to the nearest surface
+3. **The sensor finding the "smaller" distance wins**
+   - **Negative distances beat positive distances** (sensor inside terrain beats sensor above terrain)
+   - If both same sign, smallest absolute value wins
+   - Sensor A breaks ties (left sensor has priority)
 
-**Reposition Conditions:**
+**Distance Sign Interpretation:**
+- **Negative distance:** Sensor is INSIDE solid terrain (player too low, needs to move up)
+- **Zero distance:** Sensor is exactly touching surface
+- **Positive distance:** Sensor is ABOVE terrain (player too high, needs to move down to stay attached)
 
-**Sonic 1:**
+**Reposition Conditions (Sonic 1):**
+
+⚠️ **CRITICAL:** The ±14 pixel threshold is NOT just a repositioning limit—it determines **whether collision occurs at all**:
+
 ```
-IF -14 <= distance <= 14:
-    Reposition player
+1. Cast both sensors A & B
+2. Determine winning sensor (smaller distance)
+3. IF -14 <= winning distance <= 14:
+     collided = true
+     Reposition player by adding distance to Y Position
+     Ground Angle = winning sensor angle
+     isGrounded = true
+   ELSE:
+     collided = false
+     Player becomes airborne (detach from surface)
 ```
 
-**Sonic 2+:**
+**Key Insight:** If the winning distance is outside ±14 pixels, **collision is rejected entirely**. The player doesn't just skip repositioning—they **detach from the ground** and become airborne. This prevents "snap to ground" from distances too far away.
+
+**Sonic 2+ (Dynamic Threshold):**
 ```
-IF distance <= MIN(ABS(X Speed) + 4, 14):
+positive_threshold = MIN(ABS(X Speed) + 4, 14)
+negative_threshold = -14  // Always constant
+
+IF -14 <= distance <= positive_threshold:
     Reposition player (speed-dependent catch-up)
+ELSE:
+    Player becomes airborne
 ```
 
-**Resolution:**
+**Resolution Formula:**
 ```
+// If collision accepted (within threshold):
 Player Y Position += winning distance
 Ground Angle = winning sensor angle
 isGrounded = true
 ```
+
+**Common Implementation Mistakes:**
+1. ❌ Checking `collided` flag first, then applying threshold → Wrong order!
+2. ❌ Adding a "jitter threshold" (e.g., ignore distances <0.5px) → Non-authentic, causes bobbing!
+3. ❌ Only using one sensor instead of competing two → Causes slope transition glitches
+4. ✅ Apply threshold in CollisionManager BEFORE returning `collided` flag → Correct!
 
 ### Airborne Collision Detection
 
@@ -418,6 +452,144 @@ yVelocity = groundSpeed * -sin(angleRad);
 
 ---
 
+## Game Objects
+
+### Springs
+
+Springs are interactive objects that launch the player in a specific direction. There are two types and four orientations.
+
+**Spring Types:**
+- **Yellow Spring:** Standard bounce force (10 pixels/frame)
+- **Red Spring:** High bounce force (16 pixels/frame)
+
+**Spring Orientations:**
+- **UP (0°):** Launches player upward
+- **RIGHT (90°):** Launches player rightward
+- **DOWN (180°):** Launches player downward
+- **LEFT (270°):** Launches player leftward
+
+**Physics Behavior:**
+
+**Vertical Springs (UP/DOWN):**
+- Set Y velocity to bounce force (negative for up, positive for down)
+- **PRESERVE horizontal momentum** - X velocity unchanged!
+- Player enters airborne state
+- Pull player 8 pixels into spring for alignment
+- Lock controls for 16 frames
+
+**Horizontal Springs (RIGHT/LEFT):**
+- **Only activate when player is grounded** (Sonic 1/2 behavior)
+- Set ground speed to bounce force (sign determines direction)
+- Y velocity unchanged
+- Pull player 8 pixels into spring
+- Lock controls for 16 frames
+
+**Hitbox Dimensions (SPG-authentic):**
+- Vertical springs (UP/DOWN): 33×17 pixels
+- Horizontal springs (RIGHT/LEFT): 17×31 pixels
+- Use rectangular AABB collision detection
+
+**Implementation Status:**
+- ✅ Bounce forces correct
+- ✅ Horizontal momentum preservation
+- ✅ Grounded-state check for horizontal springs
+- ✅ Rectangular hitboxes
+- ✅ 8-pixel pull alignment
+- ✅ Control lock
+
+**Source:** [SPG:Game_Objects](https://info.sonicretro.org/SPG:Game_Objects)
+
+---
+
+## Hitboxes
+
+### Player Hitbox
+
+The player's hitbox changes based on state:
+
+**Standing/Running:**
+- Width: 17 pixels (radius: 8.5 pixels)
+- Height: 33 pixels (radius: 16.5 pixels)
+- Center point: Player position
+
+**Rolling/Spin Dash:**
+- Width: 15 pixels (radius: 7.5 pixels)
+- Height: 30 pixels (radius: 15 pixels)
+
+**Critical Notes:**
+- Width is NARROWER than height
+- Hit detection uses separate width/height radii, not circular
+- Different states have different hitboxes
+- Sensors extend beyond hitbox for collision detection
+
+**Source:** [SPG:Hitboxes](https://info.sonicretro.org/SPG:Hitboxes#The_Player.27s_Hitbox)
+
+---
+
+## Loop Construction
+
+### Full Vertical Loops
+
+Vertical loop-de-loops (360° paths) are one of Sonic's most iconic features, but they require specialized collision architecture.
+
+**Requirements for Full Vertical Loops:**
+
+**1. Dual-Layer Collision System (A/B Layers)**
+- Terrain exists on two separate layers: Layer A and Layer B
+- Player can only collide with ONE layer at a time
+- Each layer has complete collision geometry
+
+**2. Layer Switchers**
+- Special markers placed at loop entry and exit points
+- When player crosses a switcher, active layer changes
+- Entry: Switch from Layer A to Layer B (or vice versa)
+- Exit: Switch back to original layer
+
+**3. Ceiling Sensors**
+- Player needs ceiling sensors for upside-down collision
+- When gravity mode is CEILING (180°), ceiling sensors detect floor
+- Without ceiling sensors, player falls through loop ceiling
+
+**Loop Structure Example:**
+```
+         [Ceiling Layer B]
+        /                \
+    [Entry]            [Exit]
+   Switcher →        ← Switcher
+    /                      \
+[Floor Layer A]         [Floor Layer A]
+```
+
+**Why This Is Required:**
+- At loop entry, player is on floor (Layer A)
+- Player transitions to ceiling (Layer B) via switcher
+- Player runs upside-down on Loop ceiling (Layer B)
+- Player transitions back to floor (Layer A) at exit switcher
+- Without layer system, loop floor and ceiling geometry would conflict
+
+**Current Implementation Status:**
+- ❌ Dual-layer collision system NOT IMPLEMENTED
+- ❌ Layer switchers NOT IMPLEMENTED
+- ❌ Ceiling sensors NOT IMPLEMENTED
+- ✅ Loop geometry properly structured (ready for layers)
+- ✅ Gravity mode switching (FLOOR → CEILING) works
+- 🔄 Using half-pipe workaround (no ceiling running required)
+
+**Workaround:**
+Current implementation uses a "half-pipe" style curved valley instead of full vertical loops. This provides similar visual/gameplay feel without requiring ceiling collision.
+
+**Implementation Notes:**
+- See `TerrainManager.buildFullLoop()` for properly researched loop geometry
+- See `TerrainManager.buildHalfPipe()` for current workaround
+- Full loops will require architectural changes to collision system
+- Recommend implementing layer system before attempting full loops
+
+**Sources:**
+- [SPG:Solid_Terrain#Loops](https://info.sonicretro.org/SPG:Solid_Terrain#Loops)
+- [SPG:Slope_Physics#360_Degree_Movement](https://info.sonicretro.org/SPG:Slope_Physics#360_Degree_Movement)
+
+---
+
 ## Additional Resources
 
 - **Sonic Physics Guide:** http://info.sonicretro.org/Sonic_Physics_Guide
@@ -430,6 +602,14 @@ yVelocity = groundSpeed * -sin(angleRad);
 ---
 
 ## Revision History
+
+- **2025-11-10:** Added Game Objects, Hitboxes, and Loop Construction
+  - Comprehensive spring physics documentation (vertical/horizontal behavior)
+  - Player hitbox dimensions for all states
+  - Full explanation of loop requirements (dual-layer system, ceiling sensors)
+  - Documented half-pipe workaround for loops
+  - Implementation status checklists for springs and loops
+  - Additional SPG sources referenced
 
 - **2025-11-09:** Initial compilation from Sonic Physics Guide
   - Main Game Loop, Running, Slope Physics, Slope Collision

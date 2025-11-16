@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 
 /**
  * E2E Tests for User Story 4.1: Spring Bounce
@@ -10,53 +10,98 @@ test.describe('Story 4.1: Spring Bounce', () => {
     await page.waitForSelector('canvas', { timeout: 10000 });
     await page.waitForTimeout(2000);
 
-    // Enable debug mode
-    await page.keyboard.press('d');
-    await page.waitForTimeout(500);
+    // Verify gameState is available
+    await page.waitForFunction(() => (window as any).gameState !== undefined);
   });
 
-  test('should encounter springs in the level', async ({ page }) => {
-    // Springs are placed at:
-    // - Spring 1 (yellow): 110 * 16 = 1760px (downhill run)
-    // - Spring 2 (red): 123 * 16 = 1968px (valley)
-    // - Spring 3 (yellow): 168 * 16 = 2688px (platform section)
+  test.afterEach(async ({ page }) => {
+    // Explicitly close page to free resources
+    await page.close();
+  });
+
+  test('should encounter springs in the level', { timeout: 60000 }, async ({ page }) => {
+    // Springs are placed at (GAP-FREE continuous level):
+    // - Spring 1 (yellow): 74 * 16 = 1184px (bottom of downhill)
+    // - Spring 2 (red): 89 * 16 = 1424px (valley floor)
+    // - Spring 3 (yellow): 130 * 16 = 2080px (before final uphill)
 
     // Navigate to first spring location
     await page.keyboard.down('ArrowRight');
 
-    // Run until we're past first spring position
-    let debugText = await page.textContent('body');
-    let x = extractXPosition(debugText!);
+    // Run until we're past first spring position with instrumentation
+    let x = await getXPosition(page);
+    let iterations = 0;
+    let lastX = 0;
 
-    while (x < 1800) {
+    while (x < 1200) {
       await page.waitForTimeout(100);
-      debugText = await page.textContent('body');
-      x = extractXPosition(debugText!);
+      x = await getXPosition(page);
+      iterations++;
+
+      // Log progress every 10 iterations
+      if (iterations % 10 === 0) {
+        const gameState = await page.evaluate(() => (window as any).gameState);
+        console.log(`Iteration ${iterations}: x=${x.toFixed(0)}, y=${gameState.y}, yVel=${gameState.yVelocity.toFixed(2)}, springs=${gameState.springHitCount}, grounded=${gameState.isGrounded}`);
+      }
+
+      // Detect stuck player (not moving)
+      if (Math.abs(x - lastX) < 1 && iterations > 10) {
+        const gameState = await page.evaluate(() => (window as any).gameState);
+        throw new Error(`Player stuck at x=${x.toFixed(0)}, y=${gameState.y} after ${iterations} iterations`);
+      }
+      lastX = x;
+
+      // Safety timeout
+      if (iterations > 600) {
+        const gameState = await page.evaluate(() => (window as any).gameState);
+        throw new Error(`Timeout: Only reached x=${x.toFixed(0)} after 60s. Springs hit: ${gameState.springHitCount}`);
+      }
     }
 
     await page.keyboard.up('ArrowRight');
 
     // We should have passed the first spring area
-    expect(x).toBeGreaterThan(1700);
-    console.log('Reached spring area at x:', x);
+    const finalState = await page.evaluate(() => (window as any).gameState);
+    expect(x).toBeGreaterThan(1150);
+    console.log(`Reached spring area at x=${x.toFixed(0)}. Springs hit: ${finalState.springHitCount}`);
   });
 
-  test('should be launched upward by spring', async ({ page }) => {
-    // Navigate to first spring
+  test('should be launched upward by spring', { timeout: 60000 }, async ({ page }) => {
+    // Navigate to first spring (gap-free level: 1184px)
     await page.keyboard.down('ArrowRight');
 
-    let debugText = await page.textContent('body');
-    let x = extractXPosition(debugText!);
+    let x = await getXPosition(page);
+    let iterations = 0;
+    let lastX = 0;
 
-    // Run to spring location (around 1760px)
-    while (x < 1750) {
+    // Run to spring location (around 1184px) with instrumentation
+    while (x < 1170) {
       await page.waitForTimeout(50);
-      debugText = await page.textContent('body');
-      x = extractXPosition(debugText!);
+      x = await getXPosition(page);
+      iterations++;
+
+      if (iterations % 20 === 0) {
+        const gameState = await page.evaluate(() => (window as any).gameState);
+        console.log(`Iteration ${iterations}: x=${x.toFixed(0)}, springs=${gameState.springHitCount}`);
+      }
+
+      // Detect stuck player
+      if (Math.abs(x - lastX) < 1 && iterations > 20) {
+        const gameState = await page.evaluate(() => (window as any).gameState);
+        throw new Error(`Player stuck at x=${x.toFixed(0)} after ${iterations} iterations`);
+      }
+      lastX = x;
+
+      // Safety timeout
+      if (iterations > 600) {
+        const gameState = await page.evaluate(() => (window as any).gameState);
+        throw new Error(`Timeout: Only reached x=${x.toFixed(0)} after 30s. Springs hit: ${gameState.springHitCount}`);
+      }
     }
 
     // Get Y position before potential spring bounce
-    const yBefore = extractYPosition(debugText!);
+    const yBefore = await getYPosition(page);
+    const springsBefore = await page.evaluate(() => (window as any).gameState.springHitCount);
 
     // Continue a bit to hit spring
     await page.waitForTimeout(200);
@@ -66,57 +111,77 @@ test.describe('Story 4.1: Spring Bounce', () => {
     await page.waitForTimeout(100);
 
     // Get Y position after spring (should be higher = lower Y value)
-    debugText = await page.textContent('body');
-    const yAfter = extractYPosition(debugText!);
-    const yVelocity = extractYVelocity(debugText!);
+    const yAfter = await getYPosition(page);
+    const yVelocity = await getYVelocity(page);
+    const springsAfter = await page.evaluate(() => (window as any).gameState.springHitCount);
 
-    console.log(`Y before: ${yBefore}, Y after: ${yAfter}, Y velocity: ${yVelocity}`);
+    console.log(`Y before: ${yBefore}, Y after: ${yAfter}, Y velocity: ${yVelocity.toFixed(2)}, Springs: ${springsBefore} -> ${springsAfter}`);
 
     // If we hit the spring, Y velocity should be significantly negative
     // Note: This test is approximate - spring collision depends on precise positioning
   });
 
-  test('should navigate to red spring in valley', async ({ page }) => {
-    // Navigate to valley (around x = 1968px)
+  test('should navigate to red spring in valley', { timeout: 60000 }, async ({ page }) => {
+    // Navigate to red spring (Spring 2 at x=1424, spawn is at x=300)
     await page.keyboard.down('ArrowRight');
 
-    let debugText = await page.textContent('body');
-    let x = extractXPosition(debugText!);
+    let x = await getXPosition(page);
+    let iterations = 0;
+    let lastX = 0;
 
-    // Run to valley spring location
-    while (x < 1950) {
+    // Run to red spring location (x=1424) with instrumentation
+    while (x < 1420) {
       await page.waitForTimeout(50);
-      debugText = await page.textContent('body');
-      x = extractXPosition(debugText!);
+      x = await getXPosition(page);
+      iterations++;
+
+      if (iterations % 20 === 0) {
+        const gameState = await page.evaluate(() => (window as any).gameState);
+        console.log(`Iteration ${iterations}: x=${x.toFixed(0)}, springs=${gameState.springHitCount}`);
+      }
+
+      // Detect stuck player
+      if (Math.abs(x - lastX) < 1 && iterations > 20) {
+        const gameState = await page.evaluate(() => (window as any).gameState);
+        throw new Error(`Player stuck at x=${x.toFixed(0)} after ${iterations} iterations`);
+      }
+      lastX = x;
+
+      // Safety timeout
+      if (iterations > 600) {
+        const gameState = await page.evaluate(() => (window as any).gameState);
+        throw new Error(`Timeout: Only reached x=${x.toFixed(0)} after 30s. Springs hit: ${gameState.springHitCount}`);
+      }
     }
 
     await page.keyboard.up('ArrowRight');
 
-    // Should be at valley location
-    expect(x).toBeGreaterThan(1900);
-    expect(x).toBeLessThan(2100);
+    // Should be at red spring location (x=1424, allow ±50px)
+    const finalState = await page.evaluate(() => (window as any).gameState);
+    expect(x).toBeGreaterThan(1400);
+    expect(x).toBeLessThan(1470);
 
-    console.log('Reached valley spring area at x:', x);
+    console.log(`Reached red spring area at x=${x.toFixed(0)}. Springs hit: ${finalState.springHitCount}`);
   });
 
-  test('should handle multiple springs in level', async ({ page }) => {
+  test('should handle multiple springs in level', { timeout: 90000 }, async ({ page }) => {
     // Long test to navigate through level and potentially hit multiple springs
-    let springCount = 0;
+    let velocitySpikes = 0;
     let lastYVelocity = 0;
 
     await page.keyboard.down('ArrowRight');
 
-    // Run for extended time
+    // Run for extended time (15 seconds of gameplay)
     for (let i = 0; i < 150; i++) {
       await page.waitForTimeout(100);
 
-      const debugText = await page.textContent('body');
-      const yVelocity = extractYVelocity(debugText!);
+      const gameState = await page.evaluate(() => (window as any).gameState);
+      const yVelocity = gameState.yVelocity;
 
       // Detect sudden upward velocity changes (potential spring bounce)
       if (yVelocity < -8 && lastYVelocity > -8) {
-        springCount++;
-        console.log(`Potential spring bounce detected at iteration ${i}, velocity: ${yVelocity}`);
+        velocitySpikes++;
+        console.log(`Velocity spike at iteration ${i}: ${yVelocity.toFixed(2)}, x=${gameState.x}, actual springs hit=${gameState.springHitCount}`);
       }
 
       lastYVelocity = yVelocity;
@@ -124,13 +189,15 @@ test.describe('Story 4.1: Spring Bounce', () => {
 
     await page.keyboard.up('ArrowRight');
 
-    console.log(`Detected ${springCount} potential spring bounces`);
+    const finalState = await page.evaluate(() => (window as any).gameState);
+    console.log(`Velocity spikes detected: ${velocitySpikes}, Actual spring hits: ${finalState.springHitCount}, Final position: x=${finalState.x}`);
   });
 
-  test('should show control lock after spring bounce', async ({ page }) => {
+  test('should show control lock after spring bounce', { timeout: 45000 }, async ({ page }) => {
     // This test would require checking if player controls are locked
     // after spring activation (16 frames / ~267ms)
     // For now, this is a placeholder for the concept
+    // NOTE: This test will FAIL until level extends to springs
 
     // Navigate to spring and hit it
     await page.keyboard.down('ArrowRight');
@@ -148,17 +215,21 @@ test.describe('Story 4.1: Spring Bounce', () => {
 /**
  * Helper functions
  */
-function extractXPosition(debugText: string): number {
-  const match = debugText.match(/Pos:\s*\(([\d.-]+),/);
-  return match && match[1] ? parseFloat(match[1]) : 0;
+async function getGameState(page: Page): Promise<any> {
+  return await page.evaluate(() => (window as any).gameState);
 }
 
-function extractYPosition(debugText: string): number {
-  const match = debugText.match(/Pos:\s*\([\d.-]+,\s*([\d.-]+)\)/);
-  return match && match[1] ? parseFloat(match[1]) : 0;
+async function getXPosition(page: Page): number {
+  const gameState = await getGameState(page);
+  return gameState.x;
 }
 
-function extractYVelocity(debugText: string): number {
-  const match = debugText.match(/Velocity:\s*\([\d.-]+,\s*([\d.-]+)\)/);
-  return match && match[1] ? parseFloat(match[1]) : 0;
+async function getYPosition(page: Page): number {
+  const gameState = await getGameState(page);
+  return gameState.y;
+}
+
+async function getYVelocity(page: Page): number {
+  const gameState = await getGameState(page);
+  return gameState.yVelocity;
 }

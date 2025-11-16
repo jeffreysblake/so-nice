@@ -93,25 +93,102 @@ export class Spring extends GameObject {
   checkPlayerCollision(playerX: number, playerY: number, playerRadius: number): boolean {
     if (!this.isObjectActive) return false;
 
-    const dx = playerX - this.x;
-    const dy = playerY - this.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    // Use proper rectangular hitboxes based on SPG dimensions
+    // Player hitbox: 17×33 pixels (width radius ~8, height radius ~16)
+    let springWidth, springHeight;
 
-    return distance < (playerRadius + 20);
+    switch (this.orientation) {
+      case SpringOrientation.UP:
+      case SpringOrientation.DOWN:
+        // Vertical springs: 33×17 pixels (SPG spec)
+        springWidth = 33;
+        springHeight = 17;
+        break;
+
+      case SpringOrientation.RIGHT:
+      case SpringOrientation.LEFT:
+        // Horizontal springs: 17×31 pixels (SPG spec)
+        springWidth = 17;
+        springHeight = 31;
+        break;
+    }
+
+    // Rectangular collision detection (AABB)
+    const halfSpringWidth = springWidth / 2;
+    const halfSpringHeight = springHeight / 2;
+    const playerWidth = playerRadius * 2; // Player width ~17 pixels
+    const playerHeight = playerRadius * 2; // Approximate, actual is ~33 pixels
+
+    // Check if rectangles overlap
+    const dx = Math.abs(playerX - this.x);
+    const dy = Math.abs(playerY - this.y);
+
+    return (
+      dx < halfSpringWidth + playerRadius &&
+      dy < halfSpringHeight + playerRadius
+    );
   }
 
-  onPlayerInteract(player: any): void {
-    if (!this.isObjectActive || this.isCompressed) return;
+  onPlayerInteract(player: any): boolean {
+    if (!this.isObjectActive || this.isCompressed) return false;
 
-    // Apply bounce force based on orientation
-    const angleRad = (this.orientation * Math.PI) / 180;
+    // Apply bounce force based on orientation (SPG-authentic physics)
+    // Key principle: Vertical springs preserve horizontal momentum!
 
-    player.physicsState.xVelocity = this.bounceForce * Math.sin(angleRad);
-    player.physicsState.yVelocity = -this.bounceForce * Math.cos(angleRad);
+    switch (this.orientation) {
+      case SpringOrientation.UP:
+        // Vertical spring UP: Set Y velocity, preserve X velocity (horizontal momentum)
+        player.physicsState.yVelocity = -this.bounceForce; // Negative = upward
+        // X velocity unchanged - player keeps moving horizontally!
 
-    // Put player in air
-    player.physicsState.isGrounded = false;
-    player.physicsState.isJumping = true;
+        // Pull player 8 pixels into spring for proper alignment
+        player.y = this.y - 8;
+        player.physicsState.y = player.y;
+
+        // Put player in air
+        player.physicsState.isGrounded = false;
+        player.physicsState.isJumping = true;
+        break;
+
+      case SpringOrientation.DOWN:
+        // Vertical spring DOWN: Set Y velocity, preserve X velocity
+        player.physicsState.yVelocity = this.bounceForce; // Positive = downward
+        // X velocity unchanged
+
+        player.y = this.y + 8;
+        player.physicsState.y = player.y;
+
+        player.physicsState.isGrounded = false;
+        player.physicsState.isJumping = true;
+        break;
+
+      case SpringOrientation.RIGHT:
+        // Horizontal spring RIGHT: Only works when grounded (Sonic 1/2 behavior)
+        if (!player.physicsState.isGrounded) {
+          return false; // No bounce if player is in air
+        }
+
+        // Set ground speed, not X velocity
+        player.physicsState.groundSpeed = this.bounceForce;
+        // Y velocity unchanged
+
+        // Pull player into spring
+        player.x = this.x + 8;
+        player.physicsState.x = player.x;
+        break;
+
+      case SpringOrientation.LEFT:
+        // Horizontal spring LEFT: Only works when grounded
+        if (!player.physicsState.isGrounded) {
+          return false; // No bounce if player is in air
+        }
+
+        player.physicsState.groundSpeed = -this.bounceForce; // Negative for leftward
+
+        player.x = this.x - 8;
+        player.physicsState.x = player.x;
+        break;
+    }
 
     // Lock controls briefly
     player.physicsState.controlLock = 16;
@@ -121,7 +198,8 @@ export class Spring extends GameObject {
     this.compressionTimer = 10;
     this.drawSpring();
 
-    console.log(`Spring bounce! Force: ${this.bounceForce}, Orientation: ${this.orientation}°`);
+    console.log(`Spring bounce! Type: ${this.springType}, Force: ${this.bounceForce}, Orientation: ${this.orientation}°`);
+    return true;
   }
 
   update(_time: number, _delta: number): void {

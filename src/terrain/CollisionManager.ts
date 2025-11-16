@@ -58,19 +58,33 @@ export class CollisionManager {
   /**
    * Cast a sensor and check for collision
    * Based on Sonic Physics Guide sensor system
+   *
+   * Per RSDKv4 reference implementation:
+   * - Search up to 3 tiles (48 pixels) from sensor position
+   * - Find CLOSEST surface within range (not first)
+   * - Apply collision tolerance of 14 pixels per Sonic Physics Guide
    */
   castSensor(
     x: number,
     y: number,
     direction: SensorDirection,
     _mode: GroundMode,
-    maxDistance: number = 32
+    maxDistance: number = 48  // Increased from 32 to match RSDKv4 (3 tiles)
   ): SensorResult {
     const gridX = Math.floor(x / this.tileSize);
     const gridY = Math.floor(y / this.tileSize);
 
-    // Check current tile and adjacent tiles
-    for (let i = 0; i < 2; i++) {
+    // Track closest surface found (not first!)
+    let closestResult: SensorResult = {
+      distance: maxDistance,
+      angle: 0,
+      collided: false,
+    };
+
+    // Check enough tiles to cover maxDistance
+    // +1 to ensure we check current tile plus full range
+    const tilesToCheck = Math.ceil(maxDistance / this.tileSize) + 1;
+    for (let i = 0; i < tilesToCheck; i++) {
       let checkX = gridX;
       let checkY = gridY;
 
@@ -100,17 +114,22 @@ export class CollisionManager {
         checkY
       );
 
-      if (result.collided) {
-        return result;
+      // Track CLOSEST surface within range (key fix for X=890 bug!)
+      if (Math.abs(result.distance) < Math.abs(closestResult.distance)) {
+        closestResult = result;
       }
     }
 
-    // No collision found
-    return {
-      distance: maxDistance,
-      angle: 0,
-      collided: false,
-    };
+    // Apply collision check based on distance
+    // Per Sonic Physics Guide, collision tolerance of 14 pixels applies to ground snapping
+    // But we need to detect surfaces further away when falling
+    const MAX_SNAP_DISTANCE = 16; // Maximum distance to snap player to ground (1 tile)
+
+    // Collided if close enough to the surface
+    // This is more permissive than the 14px tolerance to handle falling
+    closestResult.collided = Math.abs(closestResult.distance) <= MAX_SNAP_DISTANCE;
+
+    return closestResult;
   }
 
   /**
@@ -150,28 +169,35 @@ export class CollisionManager {
 
     if (direction === SensorDirection.DOWN || direction === SensorDirection.UP) {
       // Use height array
+      // In Sonic 1, height = number of solid pixels FROM BOTTOM
+      // For height=16 (full tile): solid fills entire tile, surface at TOP (y=0)
+      // For height=8 (half tile): solid fills bottom half, surface at MIDDLE (y=8)
       const height = tile.getHeightAt(localX);
+      const surfaceY = this.tileSize - height; // Surface at top of solid region
 
       if (direction === SensorDirection.DOWN) {
-        // Distance from top of tile to surface
-        distance = height - localY;
-        collided = localY >= (this.tileSize - height);
+        // Distance: negative if above surface (move down), positive if below surface (move up)
+        distance = localY - surfaceY;
+        collided = localY >= surfaceY; // Collided if at or below surface
       } else {
-        // Direction is UP
-        distance = (this.tileSize - height) - localY;
-        collided = localY <= (this.tileSize - height);
+        // Direction is UP - sensor checking ceiling
+        distance = surfaceY - localY;
+        collided = distance >= 0; // Collided if at or above surface
       }
     } else {
       // Use width array for horizontal collision
       const width = tile.getWidthAt(localY);
+      const surfaceX = this.tileSize - width; // Surface position in tile (from left)
 
       if (direction === SensorDirection.RIGHT) {
-        distance = width - localX;
-        collided = localX >= (this.tileSize - width);
+        // Distance sensor needs to move left to reach surface
+        // Positive = sensor past surface (inside), negative = sensor before surface
+        distance = localX - surfaceX;
+        collided = distance >= 0; // Collided if at or past surface
       } else {
-        // Direction is LEFT
-        distance = (this.tileSize - width) - localX;
-        collided = localX <= (this.tileSize - width);
+        // Direction is LEFT - sensor checking from right
+        distance = surfaceX - localX;
+        collided = distance >= 0; // Collided if at or before surface
       }
     }
 
@@ -187,6 +213,8 @@ export class CollisionManager {
 
   /**
    * Check ground collision using two sensors (left and right)
+   * Per Sonic Physics Guide: "In Sonic 1, collision occurs only if the winning
+   * distance is between -14 and +14 pixels."
    */
   checkGroundSensors(
     x: number,

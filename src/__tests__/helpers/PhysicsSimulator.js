@@ -9,6 +9,9 @@ export class PhysicsSimulator {
     collisionManager = null;
     sensorWidth = 9;
     heightRadius = 20;
+    hasLoggedLanding = false; // For diagnostic logging
+    wasGroundedLastFrame = false; // Track grounded state across frames
+    wasJumpPressedLastFrame = false; // Track jump button state for JustDown detection
     constructor(x = 0, y = 0) {
         this.state = {
             x,
@@ -34,6 +37,10 @@ export class PhysicsSimulator {
         return { ...this.state };
     }
     setState(newState) {
+        // Track previous grounded state before updating
+        if ('isGrounded' in newState) {
+            this.wasGroundedLastFrame = this.state.isGrounded;
+        }
         this.state = { ...this.state, ...newState };
     }
     /**
@@ -48,6 +55,16 @@ export class PhysicsSimulator {
         if (this.collisionManager) {
             this.checkGroundCollision();
         }
+        // If we just landed (became grounded), clear jumping state
+        if (!this.wasGroundedLastFrame && this.state.isGrounded) {
+            this.state.isJumping = false;
+        }
+        // If we just left the ground (and didn't jump), convert groundSpeed to air velocity
+        if (this.wasGroundedLastFrame && !this.state.isGrounded && !this.state.isJumping) {
+            const angleRad = (this.state.groundAngle * Math.PI) / 180;
+            this.state.xVelocity = this.state.groundSpeed * Math.cos(angleRad);
+            this.state.yVelocity = this.state.groundSpeed * -Math.sin(angleRad);
+        }
         if (this.state.isGrounded) {
             this.updateGroundMovement(input, deltaFrames);
             this.applySlopePhysics(deltaFrames);
@@ -58,6 +75,10 @@ export class PhysicsSimulator {
         }
         // Move player
         this.movePlayer(deltaFrames);
+        // Track grounded state for next frame
+        this.wasGroundedLastFrame = this.state.isGrounded;
+        // Track jump button state for next frame (for JustDown detection)
+        this.wasJumpPressedLastFrame = input.jump;
     }
     /**
      * Check ground collision using sensors
@@ -68,18 +89,42 @@ export class PhysicsSimulator {
         const sensorY = this.state.y + this.heightRadius;
         const groundResult = this.collisionManager.checkGroundSensors(this.state.x, sensorY, this.sensorWidth, this.state.groundMode);
         const wasGrounded = this.state.isGrounded;
+        // DIAGNOSTIC: Log every collision detection
+        if (groundResult.collided && !wasGrounded && !this.hasLoggedLanding) {
+            console.log(`[COLLISION] sensorY=${sensorY.toFixed(2)}, distance=${groundResult.distance.toFixed(2)}, player.y=${this.state.y.toFixed(2)}`);
+        }
         if (groundResult.collided) {
-            if (!wasGrounded || this.state.yVelocity >= 0) {
+            // Only snap to surface when landing from air
+            if (!wasGrounded) {
+                // Diagnostic logging for first landing only
+                const shouldLog = !this.hasLoggedLanding;
+                if (shouldLog) {
+                    console.log(`[LANDING] player.y=${this.state.y.toFixed(2)}, sensorY=${sensorY.toFixed(2)}`);
+                    console.log(`[LANDING] collisionDistance=${groundResult.distance.toFixed(2)}`);
+                    console.log(`[LANDING] tile: gridY=${Math.floor(sensorY / 16)}, tileY=${Math.floor(sensorY / 16) * 16}`);
+                }
                 this.state.isGrounded = true;
                 this.state.groundAngle = groundResult.angle;
                 this.state.y -= groundResult.distance;
-                if (!wasGrounded && this.state.yVelocity > 0) {
-                    const angleRad = (groundResult.angle * Math.PI) / 180;
-                    const slopeFactor = Math.sin(angleRad);
-                    this.state.groundSpeed += this.state.yVelocity * slopeFactor * 0.5;
+                if (shouldLog) {
+                    console.log(`[LANDING] after snap: player.y=${this.state.y.toFixed(2)}, sensor at ${(this.state.y + this.heightRadius).toFixed(2)}`);
+                    this.hasLoggedLanding = true;
                 }
+                // Convert air velocity to ground speed when landing
+                const angleRad = (groundResult.angle * Math.PI) / 180;
+                const surfaceX = Math.cos(angleRad);
+                const surfaceY = Math.sin(angleRad);
+                // Dot product to project velocity onto surface direction
+                // Note: yVelocity sign is already in screen coords (Y+ down)
+                const speedAlongSurface = this.state.xVelocity * surfaceX - this.state.yVelocity * surfaceY;
+                this.state.groundSpeed = speedAlongSurface;
                 this.state.yVelocity = 0;
                 this.state.isJumping = false;
+            }
+            else {
+                // Already grounded - just update angle
+                this.state.isGrounded = true;
+                this.state.groundAngle = groundResult.angle;
             }
         }
         else {
@@ -101,7 +146,7 @@ export class PhysicsSimulator {
      * Ground movement physics
      */
     updateGroundMovement(input, delta) {
-        const { ACCELERATION, DECELERATION, FRICTION, TOP_SPEED, ROLL_MIN_SPEED } = PhysicsConstants;
+        const { ACCELERATION, DECELERATION, FRICTION, ROLL_FRICTION, TOP_SPEED, ROLL_MIN_SPEED } = PhysicsConstants;
         const controlsLocked = this.state.controlLock > 0;
         if (!controlsLocked) {
             if (input.left) {
@@ -121,21 +166,63 @@ export class PhysicsSimulator {
                 }
             }
         }
-        // Friction
+        // Friction - use different values for rolling vs running
         if (!input.left && !input.right) {
+            const frictionValue = this.state.isRolling ? ROLL_FRICTION : FRICTION;
             if (this.state.groundSpeed > 0) {
-                this.state.groundSpeed -= Math.min(this.state.groundSpeed, FRICTION * delta);
+                this.state.groundSpeed -= Math.min(this.state.groundSpeed, frictionValue * delta);
             }
             else if (this.state.groundSpeed < 0) {
-                this.state.groundSpeed += Math.min(Math.abs(this.state.groundSpeed), FRICTION * delta);
+                this.state.groundSpeed += Math.min(Math.abs(this.state.groundSpeed), frictionValue * delta);
             }
         }
         // Cap speed
         if (Math.abs(this.state.groundSpeed) > TOP_SPEED) {
             this.state.groundSpeed = Math.sign(this.state.groundSpeed) * TOP_SPEED;
         }
-        // Rolling
-        if (input.down && !this.state.isRolling && Math.abs(this.state.groundSpeed) > ROLL_MIN_SPEED) {
+        // Spin dash mechanics
+        const isStopped = Math.abs(this.state.groundSpeed) < 0.5;
+        // Enter spin dash state when DOWN is held while stopped
+        if (input.down && isStopped && !this.state.isSpindashing) {
+            this.state.isSpindashing = true;
+            this.state.spindashCharge = 0;
+        }
+        // Spin dash charging and decay
+        if (this.state.isSpindashing) {
+            // Charge on jump button press (JustDown simulation)
+            const jumpJustPressed = input.jump && !this.wasJumpPressedLastFrame;
+            if (jumpJustPressed) {
+                this.state.spindashCharge = Math.min(this.state.spindashCharge + PhysicsConstants.SPINDASH_CHARGE, PhysicsConstants.SPINDASH_MAX_CHARGE);
+            }
+            // Apply decay each frame (but not on the same frame as charging)
+            if (this.state.spindashCharge > 0 && !jumpJustPressed) {
+                this.state.spindashCharge -=
+                    (this.state.spindashCharge / 0.125) / 256 * delta;
+                // Clamp to zero to prevent negative charge
+                if (this.state.spindashCharge < 0) {
+                    this.state.spindashCharge = 0;
+                }
+            }
+            // Release spin dash when DOWN is released
+            if (!input.down && this.state.spindashCharge > 0) {
+                // Convert charge to ground speed
+                const releaseSpeed = PhysicsConstants.SPINDASH_RELEASE_SPEED +
+                    Math.floor(this.state.spindashCharge) / 2;
+                // Apply in facing direction
+                this.state.groundSpeed =
+                    this.state.isFacingRight ? releaseSpeed : -releaseSpeed;
+                // Start rolling
+                this.state.isRolling = true;
+                this.state.isSpindashing = false;
+                this.state.spindashCharge = 0;
+            }
+            // Cancel spin dash if DOWN released with no charge
+            if (!input.down && this.state.spindashCharge === 0) {
+                this.state.isSpindashing = false;
+            }
+        }
+        // Rolling (normal roll, not from spin dash)
+        if (input.down && !this.state.isRolling && !this.state.isSpindashing && Math.abs(this.state.groundSpeed) > ROLL_MIN_SPEED) {
             this.state.isRolling = true;
         }
         if (this.state.isRolling && Math.abs(this.state.groundSpeed) < ROLL_MIN_SPEED) {
@@ -172,11 +259,13 @@ export class PhysicsSimulator {
             const sinAngle = Math.sin(angleRad);
             let slopeFactor;
             if (this.state.isRolling) {
-                // Uphill (negative sine): use weaker factor for rolling uphill
-                // Downhill (positive sine): use stronger factor for rolling downhill
+                // Note: In screen coords with Y+ down, negative sin = downhill
+                // e.g., 315° (downhill right) has sin(315°) = -0.707
+                // Downhill (negative sine): use stronger factor for rolling downhill
+                // Uphill (positive sine): use weaker factor for rolling uphill
                 slopeFactor = sinAngle < 0
-                    ? PhysicsConstants.SLOPE_FACTOR_ROLLUP
-                    : PhysicsConstants.SLOPE_FACTOR_ROLLDOWN;
+                    ? PhysicsConstants.SLOPE_FACTOR_ROLLDOWN
+                    : PhysicsConstants.SLOPE_FACTOR_ROLLUP;
             }
             else {
                 slopeFactor = PhysicsConstants.SLOPE_FACTOR_NORMAL;
@@ -204,7 +293,10 @@ export class PhysicsSimulator {
         if (this.state.isGrounded) {
             const angleRad = (this.state.groundAngle * Math.PI) / 180;
             this.state.xVelocity = this.state.groundSpeed * Math.cos(angleRad);
-            this.state.yVelocity = this.state.groundSpeed * Math.sin(angleRad);
+            // Negate Y because screen coordinates have Y increasing downward
+            // Standard trig: sin(45°) = +0.707 (up), sin(315°) = -0.707 (down)
+            // Screen coords: Y+ is down, so we negate to get correct screen direction
+            this.state.yVelocity = this.state.groundSpeed * -Math.sin(angleRad);
         }
         this.state.x += this.state.xVelocity * delta;
         this.state.y += this.state.yVelocity * delta;
