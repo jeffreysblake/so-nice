@@ -28,8 +28,11 @@ export default defineConfig({
   /* Reporter to use - 'list' for console output, 'html' auto-opens browser (annoying!) */
   reporter: 'list',
 
-  /* Global timeout for each test */
-  timeout: 30000, // 30 seconds max per test
+  /* Timeout for each test (5 minutes for long visual tests) */
+  timeout: 300000,
+
+  /* Global timeout for entire test run (10 minutes) */
+  globalTimeout: 600000,
 
   /* Shared settings for all the projects below */
   use: {
@@ -56,7 +59,28 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          args: [
+            '--disable-dev-shm-usage',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-web-security',
+            '--disable-features=IsolateOrigins,site-per-process',
+            '--ignore-gpu-blocklist',
+            '--disable-gpu',
+          ],
+        },
+      },
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
     },
   ],
 

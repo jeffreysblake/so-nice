@@ -52,10 +52,13 @@ export class Motobug extends Enemy {
   }
 
   updateAI(delta: number): void {
-    this.walkTimer += delta;
+    // Normalize delta from milliseconds to frames (60 FPS standard)
+    const deltaNormalized = delta / (1000 / 60);
+
+    this.walkTimer += deltaNormalized;
 
     // Walk in current direction
-    this.x += this.direction * this.speed * delta;
+    this.x += this.direction * this.speed * deltaNormalized;
 
     // Change direction every 3 seconds (180 frames at 60fps)
     if (this.walkTimer > 180) {
